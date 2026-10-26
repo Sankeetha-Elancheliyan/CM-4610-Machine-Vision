@@ -1,0 +1,593 @@
+<title>Fourier Image Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, six-step tab row, then a stage of image cards that always read left to right as the pipeline: image, spectrum, mask, result. Blue always means low-pass, orange always means high-pass. */
+:root{
+  --bg:#F1F3F2;--surface:#FFFFFF;--ink:#16201D;--muted:#55645F;--line:#CCD4D1;
+  --lo:#2358B8;--hi:#B8420C;--ok:#2E7D54;--tone:var(--ink);
+  --font-display:"Archivo","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101615;--surface:#182120;--ink:#E7EFEC;--muted:#98A8A3;--line:#2B3835;
+    --lo:#7FAAFF;--hi:#FF9D63;--ok:#5FD39A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101615;--surface:#182120;--ink:#E7EFEC;--muted:#98A8A3;--line:#2B3835;
+  --lo:#7FAAFF;--hi:#FF9D63;--ok:#5FD39A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--tone)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--tone);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"]{background:color-mix(in srgb,var(--tone) 14%,var(--surface));border-color:var(--tone);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{border-color:var(--ink);filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.panel p.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px}
+.card canvas.spec{image-rendering:pixelated;cursor:crosshair}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--tone)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:70ch}
+.big{font-family:var(--font-mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-family:var(--font-mono);font-size:12px;padding:1px 8px;border-radius:4px;border:1px solid var(--tone);color:var(--tone)}
+.lo-text{color:var(--lo)}.hi-text{color:var(--hi)}
+.cards .card.lo{border-top:3px solid var(--lo)}.cards .card.hi{border-top:3px solid var(--hi)}
+.sub{margin:4px 0 14px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Fast Fourier transform for images</p>
+    <h1>Fourier image lab</h1>
+    <p class="lede">See an image as a stack of waves, pull the waves apart, change some of them, and build the image back.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-v="fabric" aria-pressed="false">Fabric with a hole</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">256 × 256 grayscale. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const N=256,N2=N*N,HALF=N/2;
+const cosT=new Float64Array(N/2),sinT=new Float64Array(N/2);
+for(let i=0;i<N/2;i++){cosT[i]=Math.cos(2*Math.PI*i/N);sinT[i]=Math.sin(2*Math.PI*i/N);}
+const rev=new Uint16Array(N);
+for(let i=0;i<N;i++){let r=0,x=i;for(let b=0;b<8;b++){r=(r<<1)|(x&1);x>>=1;}rev[i]=r;}
+function fft1(re,im,inv){
+  for(let i=0;i<N;i++){const j=rev[i];if(j>i){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}}
+  for(let size=2;size<=N;size<<=1){
+    const half=size>>1,step=N/size;
+    for(let i=0;i<N;i+=size){
+      for(let j=0,k=0;j<half;j++,k+=step){
+        const wr=cosT[k],wi=inv?sinT[k]:-sinT[k];
+        const a=i+j,b=a+half;
+        const tr=re[b]*wr-im[b]*wi,ti=re[b]*wi+im[b]*wr;
+        re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;
+      }
+    }
+  }
+}
+const sr=new Float64Array(N),si=new Float64Array(N);
+function fft2(re,im,inv){
+  for(let y=0;y<N;y++){const o=y*N;for(let x=0;x<N;x++){sr[x]=re[o+x];si[x]=im[o+x];}fft1(sr,si,inv);for(let x=0;x<N;x++){re[o+x]=sr[x];im[o+x]=si[x];}}
+  for(let x=0;x<N;x++){for(let y=0;y<N;y++){sr[y]=re[y*N+x];si[y]=im[y*N+x];}fft1(sr,si,inv);for(let y=0;y<N;y++){re[y*N+x]=sr[y];im[y*N+x]=si[y];}}
+  if(inv){const s=1/N2;for(let i=0;i<N2;i++){re[i]*=s;im[i]*=s;}}
+}
+const FU=new Int16Array(N2),FV=new Int16Array(N2),RAD=new Float64Array(N2);
+for(let v=0;v<N;v++)for(let u=0;u<N;u++){const i=v*N+u;FU[i]=u<HALF?u:u-N;FV[i]=v<HALF?v:v-N;RAD[i]=Math.hypot(FU[i],FV[i]);}
+function forward(gray){
+  const re=new Float64Array(gray),im=new Float64Array(N2);
+  fft2(re,im,false);
+  const mag=new Float64Array(N2);let mx=0,tp=0;
+  for(let i=0;i<N2;i++){const m=Math.hypot(re[i],im[i]);mag[i]=m;if(m>mx)mx=m;if(i>0)tp+=m*m;}
+  return {re,im,mag,maxMag:mx,totalPow:tp,sorted:null};
+}
+const wRe=new Float64Array(N2),wIm=new Float64Array(N2);
+function inverse(F,H){
+  if(H){for(let i=0;i<N2;i++){wRe[i]=F.re[i]*H[i];wIm[i]=F.im[i]*H[i];}}
+  else{wRe.set(F.re);wIm.set(F.im);}
+  fft2(wRe,wIm,true);
+  return wRe;
+}
+function lowMask(cut,gauss){
+  const H=new Float32Array(N2);
+  if(gauss){const k=Math.LN2/(cut*cut);for(let i=0;i<N2;i++)H[i]=Math.exp(-RAD[i]*RAD[i]*k);}
+  else{for(let i=0;i<N2;i++)H[i]=RAD[i]<=cut?1:0;}
+  return H;
+}
+function invertMask(H){const G=new Float32Array(N2);for(let i=0;i<N2;i++)G[i]=1-H[i];return G;}
+function energyKept(F,H){let s=0;for(let i=1;i<N2;i++){const m=F.mag[i]*H[i];s+=m*m;}return s/F.totalPow;}
+function topPeaks(F,K,protect){
+  if(K<=0)return [];
+  const best=[];
+  for(let i=0;i<N2;i++){
+    if(RAD[i]<protect)continue;
+    const m=F.mag[i];
+    if(best.length<K||m>best[best.length-1].m){
+      let j=best.length;
+      while(j>0&&best[j-1].m<m)j--;
+      best.splice(j,0,{i,m});
+      if(best.length>K)best.pop();
+    }
+  }
+  return best.map(b=>b.i);
+}
+function notchMask(peaks){
+  const H=new Float32Array(N2).fill(1);
+  for(const i of peaks){
+    const u=i%N,v=(i/N)|0;
+    for(let dv=-1;dv<=1;dv++)for(let du=-1;du<=1;du++){
+      H[((v+dv+N)%N)*N+((u+du+N)%N)]=0;
+    }
+  }
+  return H;
+}
+function keepMask(F,frac){
+  if(!F.sorted){F.sorted=Float64Array.from(F.mag).sort();}
+  const keep=Math.max(1,Math.round(frac*N2));
+  const thr=F.sorted[N2-keep];
+  const H=new Float32Array(N2);let cnt=0;
+  for(let i=0;i<N2;i++){if(F.mag[i]>=thr){H[i]=1;cnt++;}}
+  return {H,cnt};
+}
+function clamp255(v){return v<0?0:v>255?255:v;}
+function psnr(a,b){let s=0;for(let i=0;i<N2;i++){const d=clamp255(a[i])-clamp255(b[i]);s+=d*d;}const mse=s/N2;return mse<1e-9?99:10*Math.log10(65025/mse);}
+function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+function makeFabric(defect){
+  const a=new Float64Array(N2),r=rng(7);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const sa=Math.sin(2*Math.PI*16*x/N),sb=Math.sin(2*Math.PI*16*y/N);
+    let v=128+26*sa+26*sb+22*sa*sb+(r()-0.5)*8;
+    if(defect==='hole'){const dx=(x-150)/17,dy=(y-110)/12,d=dx*dx+dy*dy,w=Math.exp(-d*d*d);v=v*(1-w)+22*w;}
+    else if(defect==='stain'){const g=Math.exp(-((x-90)*(x-90)+(y-150)*(y-150))/(2*22*22));v*=1-0.5*g;}
+    else if(defect==='line'){if(y>=69&&y<=71&&x>=30&&x<=225)v+=70;}
+    a[y*N+x]=clamp255(v);
+  }
+  return a;
+}
+function addStripes(base,amp){
+  const o=new Float64Array(N2),k=2*Math.PI/N;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    o[y*N+x]=base[y*N+x]+amp*(Math.cos(k*30*x)+Math.cos(k*(14*x+22*y)));
+  }
+  return o;
+}
+function paintSpectrum(img,F,H,shift){
+  const d=img.data,lm=Math.log(1+F.maxMag);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const sx=shift?(x+HALF)%N:x,sy=shift?(y+HALF)%N:y,i=sy*N+sx;
+    let m=F.mag[i];if(H)m*=H[i];
+    const v=255*Math.pow(Math.log(1+m)/lm,1.5);
+    const o=(y*N+x)*4;d[o]=d[o+1]=d[o+2]=v>255?255:v;d[o+3]=255;
+  }
+}
+//CORE-END
+
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function later(fn){let q=false;return()=>{if(q)return;q=true;requestAnimationFrame(()=>{q=false;fn();});};}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function makeCard(label,cls,cap,tint){
+  const c=el(`<figure class="card ${tint||''}"><figcaption class="cl">${label}</figcaption><canvas width="${N}" height="${N}" class="${cls||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(N,N),cap:c.querySelector('.cc')};
+}
+function showGray(card,arr,off,gain){
+  const d=card.img.data;
+  for(let i=0;i<N2;i++){let v=arr[i]*gain+off;v=v<0?0:v>255?255:v;const o=i*4;d[o]=d[o+1]=d[o+2]=v;d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function showSpec(card,F,H,shift){paintSpectrum(card.img,F,H,shift);card.ctx.putImageData(card.img,0,0);}
+function ring(card,r,color,w){const g=card.ctx;g.save();g.strokeStyle=color;g.lineWidth=w||2;g.beginPath();g.arc(HALF,HALF,r,0,2*Math.PI);g.stroke();g.restore();}
+function dot(card,x,y,color,r,w){const g=card.ctx;g.save();g.strokeStyle=color;g.lineWidth=w||2;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.stroke();g.restore();}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${o[0]===cur}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+}
+function slider(id,label,min,max,val,step){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}</output></label>`;
+}
+function bindSlider(root,id,cb,fmt){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=fmt?fmt(v):v;};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(v);},get:()=>+s.value};
+}
+
+const state={base:null,F:null,name:'Landscape'};
+
+function makeLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d');
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,N,N);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  g.strokeStyle='#222';g.lineWidth=2;g.beginPath();g.moveTo(58,98);g.lineTo(58,70);g.stroke();
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,N,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,N,1);
+  return toGray(g.getImageData(0,0,N,N));
+}
+function toGray(id){
+  const a=new Float64Array(N2),d=id.data;
+  for(let i=0;i<N2;i++)a[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+  return a;
+}
+
+function view1(root){
+  const c1=makeCard('1 · Image','','Brightness at every pixel'),c2=makeCard('2 · FFT spectrum','spec','Click it to pick a wave'),c3=makeCard('3 · The wave you picked','','');
+  const cards=el('<div class="cards"></div>');cards.append(c1.el,c2.el,c3.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Zero frequency sits in the</span>${seg('shift',[['centre','Centre (shifted)'],['corner','Corner (raw FFT output)']],'centre')}</div>`);
+  const info=el('<p class="readout"></p>');
+  const note=el('<p class="note"></p>');
+  root.append(el('<h2>From pixels to waves</h2>'),el('<p class="explain">The FFT turns the image into a map of waves. Every point in the spectrum is one wave. Distance from the centre says how fine the stripes are, the direction says which way they run, and brightness says how strong they are.</p>'),cards,ctl,info,note);
+  let shift=true,sel=null,lastF=null;
+  function pickStrongest(){
+    let bi=1,bm=-1;
+    for(let i=1;i<N2;i++){if(RAD[i]>=3&&RAD[i]<=40&&state.F.mag[i]>bm){bm=state.F.mag[i];bi=i;}}
+    sel=[FU[bi],FV[bi]];
+  }
+  function render(){
+    if(lastF!==state.F){lastF=state.F;pickStrongest();}
+    const F=state.F;
+    showGray(c1,state.base,0,1);
+    showSpec(c2,F,null,shift);
+    const [u,v]=sel;
+    const pos=(uu,vv)=>shift?[uu+HALF,vv+HALF]:[(uu+N)%N,(vv+N)%N];
+    const a=pos(u,v),b=pos(-u,-v);
+    const col=css('--hi');
+    dot(c2,a[0],a[1],col,7,2);if(u||v)dot(c2,b[0],b[1],col,7,2);
+    const i=((v+N)%N)*N+((u+N)%N);
+    const mag=F.mag[i],phase=Math.atan2(F.im[i],F.re[i]);
+    const w=new Float64Array(N2);
+    if(!u&&!v){
+      const m=mag/N2;w.fill(m);showGray(c3,w,0,1);
+      info.innerHTML=`Frequency <b>(0, 0)</b>: the average brightness of the whole image, about <b>${m.toFixed(0)}</b> out of 255.`;
+    }else{
+      const amp=2*mag/N2,k=2*Math.PI/N;
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++)w[y*N+x]=Math.cos(k*(u*x+v*y)+phase);
+      showGray(c3,w,128,127);
+      const cyc=Math.hypot(u,v),kind=v===0?'vertical stripes':u===0?'horizontal stripes':'diagonal stripes';
+      info.innerHTML=`Frequency <b>(${u}, ${v})</b>: ${kind} that repeat <b>${cyc.toFixed(1)}</b> times across the image, one every <b>${(N/cyc).toFixed(1)}</b> pixels. Strength: ±<b>${amp.toFixed(1)}</b> brightness levels.`;
+    }
+    c3.cap.textContent='This one wave, drawn on its own';
+    note.textContent=shift?'The bright centre is the average brightness. Going outward, the waves get finer. The spectrum is mirrored because real images give waves in pairs.':'This is the raw FFT output. Zero frequency is in the top-left corner, so the slow waves are split across all four corners. Shifting moves them together in the middle.';
+  }
+  c2.cv.addEventListener('click',e=>{
+    const r=c2.cv.getBoundingClientRect();
+    const x=Math.min(N-1,Math.max(0,Math.floor((e.clientX-r.left)*N/r.width))),y=Math.min(N-1,Math.max(0,Math.floor((e.clientY-r.top)*N/r.height)));
+    sel=shift?[x-HALF,y-HALF]:[x<HALF?x:x-N,y<HALF?y:y-N];
+    render();
+  });
+  bindSeg(root,'shift',v=>{shift=v==='centre';render();});
+  return {update:render,stop(){}};
+}
+
+function view2(root){
+  const c1=makeCard('Frequencies included','spec','The ring grows outward'),c2=makeCard('Image rebuilt from them','','Inverse FFT of just those waves'),c3=makeCard('Original','','What we are aiming for');
+  const cards=el('<div class="cards"></div>');cards.append(c1.el,c2.el,c3.el);
+  const ctl=el(`<div class="controls">${slider('w-r','Include frequencies up to radius',0,182,0)}<button type="button" id="w-play" class="primary">Play</button><button type="button" id="w-reset">Reset</button></div>`);
+  const info=el('<p class="readout"></p>');
+  root.append(el('<h2>The image is a sum of waves</h2>'),el('<p class="explain">Start with only the slowest waves and keep adding finer ones. First you get a smooth blur. Fine detail and sharp edges arrive last. At full radius every wave is back and the image is exact.</p>'),cards,ctl,info);
+  let r=0,stopA=null;
+  const play=$('#w-play',root);
+  const sl=bindSlider(root,'w-r',v=>{halt();r=v;render();});
+  function halt(){if(stopA){stopA();stopA=null;}play.textContent='Play';}
+  function render(){
+    const F=state.F,H=lowMask(r,false);
+    let cnt=0;for(let i=0;i<N2;i++)cnt+=H[i];
+    showSpec(c1,F,H,true);ring(c1,Math.max(r,1),css('--lo'),2);
+    showGray(c2,inverse(F,H),0,1);showGray(c3,state.base,0,1);
+    info.innerHTML=`Waves used: <b>${cnt.toLocaleString()}</b> of <b>${N2.toLocaleString()}</b> (<b>${(100*cnt/N2).toFixed(1)}%</b>)`;
+  }
+  play.addEventListener('click',()=>{
+    if(stopA){halt();return;}
+    if(r>=182){r=0;sl.set(0);}
+    play.textContent='Pause';
+    const r0=r;
+    stopA=animate(9000*(1-r0/182)+800,p=>{r=Math.round(r0+(182-r0)*Math.pow(p,2));sl.set(r);render();},()=>{stopA=null;play.textContent='Play';});
+  });
+  $('#w-reset',root).addEventListener('click',()=>{halt();r=0;sl.set(0);render();});
+  return {update:render,stop:halt};
+}
+
+function viewFilter(root,kind){
+  const low=kind==='low',tn=low?'lo':'hi';
+  root.style.setProperty('--tone','var(--'+tn+')');
+  const c1=makeCard('1 · Image','','Original pixels',tn),c2=makeCard('2 · FFT spectrum','spec','The ring is the cutoff',tn),c3=makeCard(low?'3 · Keep the inside':'3 · Keep the outside','spec','Spectrum after the mask',tn),c4=makeCard('4 · Inverse FFT','','',tn);
+  const cards=el('<div class="cards"></div>');cards.append(c1.el,c2.el,c3.el,c4.el);
+  const id='f'+kind;
+  const ctl=el(`<div class="controls">${slider(id+'-c','Cutoff radius',1,120,low?25:10)}${seg('shape',[['ideal','Sharp circle'],['gauss','Smooth (Gaussian)']],'ideal')}${low?'':seg('mode',[['signed','Edges on gray'],['strength','Strength only']],'signed')}<button type="button" id="${id}-sw" class="primary">Sweep the cutoff</button></div>`);
+  const info=el('<p class="readout"></p>');
+  const note=el('<p class="note"></p>');
+  const title=low?'Low-pass filter: keep the slow waves':'High-pass filter: keep the fast waves';
+  const expl=low?'Keep only the frequencies inside the circle, then run the inverse FFT. Smooth areas survive. Edges, fine detail and noise fade, so the picture blurs.':'Remove the frequencies inside the circle and keep the rest. Brightness and smooth areas disappear. Only edges and fine detail are left.';
+  root.append(el(`<h2>${title}</h2>`),el(`<p class="explain">${expl}</p>`),cards,ctl,info,note);
+  let cut=low?25:10,gauss=false,mode='signed',stopA=null;
+  const btn=$('#'+id+'-sw',root);
+  const sl=bindSlider(root,id+'-c',v=>{halt();cut=v;render();});
+  const tmp=new Float64Array(N2);
+  function halt(){if(stopA){stopA();stopA=null;}btn.textContent='Sweep the cutoff';}
+  function render(){
+    const F=state.F;
+    let H=lowMask(cut,gauss);if(!low)H=invertMask(H);
+    showGray(c1,state.base,0,1);
+    showSpec(c2,F,null,true);ring(c2,cut,css('--'+tn),2);
+    showSpec(c3,F,H,true);
+    const out=inverse(F,H);
+    if(low){showGray(c4,out,0,1);c4.cap.textContent='Smooth parts stay. Detail is gone.';}
+    else if(mode==='signed'){showGray(c4,out,128,1);c4.cap.textContent='Gray means no change. Light and dark lines are edges.';}
+    else{for(let i=0;i<N2;i++)tmp[i]=Math.abs(out[i]);showGray(c4,tmp,0,3);c4.cap.textContent='How strongly each pixel differs from its surroundings.';}
+    info.innerHTML=`Cutoff radius <b>${cut}</b> · detail energy kept: <b>${(100*energyKept(F,H)).toFixed(1)}%</b>`;
+    note.textContent=gauss?'The Gaussian mask fades smoothly, so there are no ripples. The ring marks where it passes half the strength.':'The sharp circle cuts frequencies off abruptly, which makes ripples near edges. These are called ringing. Try the smooth option to remove them.';
+  }
+  bindSeg(root,'shape',v=>{gauss=v==='gauss';render();});
+  if(!low)bindSeg(root,'mode',v=>{mode=v;render();});
+  btn.addEventListener('click',()=>{
+    if(stopA){halt();return;}
+    btn.textContent='Stop';
+    const a=low?120:3,b=low?3:90;
+    stopA=animate(6000,p=>{cut=Math.max(1,Math.round(a*Math.pow(b/a,p)));sl.set(cut);render();},()=>{stopA=null;btn.textContent='Sweep the cutoff';});
+  });
+  return {update:render,stop:halt};
+}
+
+function view5(root){
+  const c1=makeCard('Original','','All waves'),c2=makeCard('Low-pass','','Slow waves only','lo'),c3=makeCard('High-pass','','Fast waves only','hi'),c4=makeCard('Low + High','','Add the two images pixel by pixel');
+  const s1=makeCard('Original spectrum','spec',''),s2=makeCard('Low-pass spectrum','spec','','lo'),s3=makeCard('High-pass spectrum','spec','','hi');
+  const check=el('<figure class="card"><figcaption class="cl">Largest difference from the original</figcaption><div class="big" id="cmp-d">0</div><p class="cc">Pixels differ by essentially nothing, so the two parts always add back to the original.</p></figure>');
+  const row1=el('<div class="cards"></div>');row1.append(c1.el,c2.el,c3.el,c4.el);
+  const row2=el('<div class="cards"></div>');row2.append(s1.el,s2.el,s3.el,check);
+  const ctl=el(`<div class="controls">${slider('cmp-c','Cutoff radius',1,120,20)}${seg('shape',[['ideal','Sharp circle'],['gauss','Smooth (Gaussian)']],'ideal')}</div>`);
+  const note=el('<p class="note"></p>');
+  root.append(el('<h2>Low-pass and high-pass together</h2>'),el('<p class="explain">The two filters split the image into two layers that always add back to the original. Low-pass is the smooth layer. High-pass is the detail layer. Move the cutoff to decide where the split happens.</p>'),ctl,row1,row2,note);
+  let cut=20,gauss=false;
+  const sl=bindSlider(root,'cmp-c',v=>{cut=v;render();});
+  const lp=new Float64Array(N2),hp=new Float64Array(N2),sum=new Float64Array(N2);
+  function render(){
+    const F=state.F,Hl=lowMask(cut,gauss),Hh=invertMask(Hl);
+    lp.set(inverse(F,Hl));hp.set(inverse(F,Hh));
+    let md=0;for(let i=0;i<N2;i++){sum[i]=lp[i]+hp[i];const d=Math.abs(sum[i]-state.base[i]);if(d>md)md=d;}
+    showGray(c1,state.base,0,1);showGray(c2,lp,0,1);showGray(c3,hp,128,1);showGray(c4,sum,0,1);
+    showSpec(s1,F,null,true);showSpec(s2,F,Hl,true);showSpec(s3,F,Hh,true);
+    $('#cmp-d',check).textContent=md<0.001?'< 0.001':md.toFixed(3);
+    note.textContent='Gray in the high-pass image means zero. Light and dark lines are edges and texture. Low-pass keeps the large shapes and brightness.';
+  }
+  bindSeg(root,'shape',v=>{gauss=v==='gauss';render();});
+  return {update:render,stop(){}};
+}
+
+function appNoise(root){
+  const n1=makeCard('1 · Image with stripe noise','','Two sets of fine stripes added'),n2=makeCard('2 · Spectrum: spikes circled','spec','Each stripe set is a pair of spikes'),n3=makeCard('3 · Spikes erased','spec','Those frequencies set to zero'),n4=makeCard('4 · Inverse FFT','','Cleaned image');
+  const cards=el('<div class="cards"></div>');cards.append(n1.el,n2.el,n3.el,n4.el);
+  const ctl=el(`<div class="controls">${slider('an-a','Noise strength',0,50,30)}${slider('an-k','Spikes to erase',0,8,4)}</div>`);
+  const info=el('<p class="readout"></p>');
+  root.append(el('<p class="explain">Regular stripes are easy to see in the spectrum because they pile all their energy into a few bright spikes. Erase just those spikes and the stripes vanish while the picture stays.</p>'),cards,ctl,info);
+  let amp=30,K=4,noisy=null,F=null,lastBase=null;
+  function refresh(){noisy=addStripes(state.base,amp);F=forward(noisy);}
+  bindSlider(root,'an-a',v=>{amp=v;refresh();render();});
+  bindSlider(root,'an-k',v=>{K=v;render();});
+  function render(){
+    if(lastBase!==state.base){lastBase=state.base;refresh();}
+    const peaks=topPeaks(F,K,10),H=notchMask(peaks);
+    showGray(n1,noisy,0,1);
+    showSpec(n2,F,null,true);
+    const col=css('--hi');
+    for(const i of peaks)dot(n2,FU[i]+HALF,FV[i]+HALF,col,6,2);
+    showSpec(n3,F,H,true);
+    const out=inverse(F,H);
+    showGray(n4,out,0,1);
+    info.innerHTML=`Erased <b>${peaks.length}</b> spike${peaks.length===1?'':'s'} · quality against the clean image (PSNR): noisy <b>${psnr(state.base,noisy).toFixed(1)} dB</b> → cleaned <b>${psnr(state.base,out).toFixed(1)} dB</b>`;
+  }
+  return {update:render,stop(){}};
+}
+
+function appFabric(root){
+  const f1=makeCard('1 · Fabric','','Regular weave'),f2=makeCard('2 · Spectrum: weave peaks circled','spec','A grid of sharp dots'),f3=makeCard('3 · Weave peaks erased','spec','Everything else kept'),f4=makeCard('4 · What is left','','Only what breaks the pattern');
+  const cards=el('<div class="cards"></div>');cards.append(f1.el,f2.el,f3.el,f4.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Defect</span>${seg('defect',[['none','None'],['hole','Hole'],['stain','Oil stain'],['line','Line']],'hole')}${slider('fb-k','Peaks to erase',0,16,8)}</div>`);
+  const info=el('<p class="readout"></p>');
+  root.append(el('<p class="explain">A good weave is perfectly regular, so its spectrum is a few sharp dots. A defect breaks the pattern. Erase the dots that belong to the weave and only the defect remains.</p>'),cards,ctl,info);
+  let defect='hole',K=8,img=null,F=null;
+  function refresh(){img=makeFabric(defect);F=forward(img);}
+  bindSeg(root,'defect',v=>{defect=v;refresh();render();});
+  bindSlider(root,'fb-k',v=>{K=v;render();});
+  const res=new Float64Array(N2);
+  function render(){
+    if(!F)refresh();
+    const peaks=topPeaks(F,K,5),H=notchMask(peaks);
+    showGray(f1,img,0,1);
+    showSpec(f2,F,null,true);
+    const col=css('--hi');
+    for(const i of peaks)dot(f2,FU[i]+HALF,FV[i]+HALF,col,6,2);
+    showSpec(f3,F,H,true);
+    res.set(inverse(F,H));
+    let m=0;for(let i=0;i<N2;i++)m+=res[i];m/=N2;
+    let s=0;for(let i=0;i<N2;i++){const d=res[i]-m;s+=d*d;res[i]=128+d*1.6;}
+    showGray(f4,res,0,1);
+    const sd=Math.sqrt(s/N2);
+    info.innerHTML=`Left-over variation: <b>${sd.toFixed(1)}</b> ${defect==='none'?'(just faint grain)':'(a defect stands out)'}`;
+  }
+  return {update:render,stop(){}};
+}
+
+function appCompress(root){
+  const levels=[0.2,0.5,1,2,5,10,20,50,100];
+  const k1=makeCard('1 · Image','','Original'),k2=makeCard('2 · Spectrum: strongest waves only','spec','Everything else set to zero'),k3=makeCard('3 · Inverse FFT','','Rebuilt from the kept waves'),k4=makeCard('4 · Error','','Difference from the original, boosted ×4');
+  const cards=el('<div class="cards"></div>');cards.append(k1.el,k2.el,k3.el,k4.el);
+  const ctl=el(`<div class="controls">${slider('cp-p','Keep the strongest',0,8,4)}</div>`);
+  const info=el('<p class="readout"></p>');
+  root.append(el('<p class="explain">Most of an image\'s detail is carried by a small share of its waves. Keep only the strongest ones and throw the rest away. This is the idea behind JPEG-style compression.</p>'),cards,ctl,info);
+  let li=4;
+  const fmt=v=>levels[v]+'%';
+  const sl=bindSlider(root,'cp-p',v=>{li=v;render();},fmt);
+  sl.set(4);
+  const err=new Float64Array(N2);
+  function render(){
+    const F=state.F,{H,cnt}=keepMask(F,levels[li]/100);
+    showGray(k1,state.base,0,1);
+    showSpec(k2,F,H,true);
+    const out=inverse(F,H);
+    showGray(k3,out,0,1);
+    for(let i=0;i<N2;i++)err[i]=Math.abs(clamp255(out[i])-state.base[i]);
+    showGray(k4,err,0,4);
+    info.innerHTML=`Kept <b>${cnt.toLocaleString()}</b> of <b>${N2.toLocaleString()}</b> waves (<b>${(100*cnt/N2).toFixed(1)}%</b>) · quality (PSNR): <b>${psnr(state.base,out).toFixed(1)} dB</b>`;
+  }
+  return {update:render,stop(){}};
+}
+
+function view6(root){
+  const apps=[['noise','Remove stripe noise',appNoise],['fabric','Find fabric defects',appFabric],['compress','Compress an image',appCompress]];
+  root.append(el('<h2>Where this is used</h2>'));
+  const bar=el(`<div class="controls sub">${seg('app',apps.map(a=>[a[0],a[1]]),'noise')}</div>`);
+  root.append(bar);
+  const hold={},cont={};
+  apps.forEach(a=>{const d=el('<div></div>');d.hidden=a[0]!=='noise';root.append(d);cont[a[0]]=d;});
+  let cur='noise';
+  function show(){
+    if(!hold[cur])hold[cur]=apps.find(a=>a[0]===cur)[2](cont[cur]);
+    hold[cur].update();
+  }
+  bindSeg(root,'app',v=>{cur=v;for(const k in cont)cont[k].hidden=k!==v;show();});
+  return {update:show,stop(){}};
+}
+
+const steps=[
+  {short:'Spectrum',build:view1},
+  {short:'Waves',build:view2},
+  {short:'Low-pass',build:r=>viewFilter(r,'low')},
+  {short:'High-pass',build:r=>viewFilter(r,'high')},
+  {short:'Compare',build:view5},
+  {short:'Uses',build:view6}
+];
+const stage=$('#stage'),nav=$('#steps');
+const panels=[],views=[];
+let cur=0;
+steps.forEach((s,i)=>{
+  const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+  b.addEventListener('click',()=>go(i));
+  nav.appendChild(b);
+  const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);panels.push(p);views.push(null);
+});
+function go(i){
+  if(views[cur])views[cur].stop();
+  cur=i;
+  panels.forEach((p,j)=>{p.hidden=j!==i;});
+  nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+  if(!views[i])views[i]=steps[i].build(panels[i]);
+  views[i].update();
+  $('#back').hidden=i===0;
+  $('#next').textContent=i===steps.length-1?'Start again':'Next';
+}
+$('#back').addEventListener('click',()=>go(Math.max(0,cur-1)));
+$('#next').addEventListener('click',()=>go(cur===steps.length-1?0:cur+1));
+
+function setBase(arr,name){
+  state.base=arr;state.F=forward(arr);state.name=name;
+  if(views[cur])views[cur].update();
+}
+const srcBtns=[...document.querySelectorAll('#src button')];
+function setSource(v){srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));}
+const msg=$('#srcmsg'),DEFAULT_MSG='256 × 256 grayscale. Everything runs in your browser.';
+$('#src').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  const v=b.dataset.v;
+  if(v==='landscape'){setSource(v);msg.textContent=DEFAULT_MSG;setBase(makeLandscape(),'Landscape');}
+  else if(v==='fabric'){setSource(v);msg.textContent=DEFAULT_MSG;setBase(makeFabric('hole'),'Fabric');}
+  else{$('#file').click();}
+});
+$('#file').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0];
+  if(!f)return;
+  if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+  const r=new FileReader();
+  r.onload=()=>{
+    const im=new Image();
+    im.onload=()=>{
+      const c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d');
+      const s=Math.min(im.width,im.height);
+      g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,N,N);
+      setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 256 × 256.';
+      setBase(toGray(g.getImageData(0,0,N,N)),f.name);
+    };
+    im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+    im.src=r.result;
+  };
+  r.onerror=()=>{msg.textContent='That file could not be read.';};
+  r.readAsDataURL(f);
+  e.target.value='';
+});
+if(window.matchMedia){
+  const mq=window.matchMedia('(prefers-color-scheme: dark)');
+  const rr=()=>{if(views[cur])views[cur].update();};
+  if(mq.addEventListener)mq.addEventListener('change',rr);
+}
+state.base=makeLandscape();state.F=forward(state.base);
+go(0);
+</script>

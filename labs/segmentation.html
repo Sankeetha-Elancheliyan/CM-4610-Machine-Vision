@@ -1,0 +1,1172 @@
+<title>Image Segmentation Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, step tabs, then a stage of cards. Blue always means the input or original, orange the output or result, rose outline the thing you are pointing at. */
+:root{
+  --bg:#F3F4F7;--surface:#FFFFFF;--ink:#111827;--muted:#566074;--line:#CFD5E0;
+  --accent:#C2185B;--in:#2A58C8;--out:#C4510C;--ok:#1E8A4C;--bad:#C62828;--tone:var(--ink);
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+    --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+  --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.25;margin:22px 0 6px}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--ink)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"],button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 11%,var(--surface));border-color:var(--ink);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px;image-rendering:pixelated}
+.card canvas.pick{cursor:crosshair}
+.card canvas.chart{aspect-ratio:1;background:var(--surface);image-rendering:auto}
+.card canvas.wide{aspect-ratio:512/170;background:var(--surface);image-rendering:auto}
+.card canvas.rulers{aspect-ratio:720/250;background:var(--surface);image-rendering:auto}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.controls[hidden]{display:none}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--ink)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b,.mono{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:72ch}
+.formula{font-family:var(--font-mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;overflow-x:auto;white-space:nowrap}
+.callout{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:8px;padding:12px 14px;margin:0 0 16px;max-width:72ch}
+.callout p{margin:0}
+.callout .mono{font-size:14px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+table.t tr[hidden]{display:none}
+table.t tr.cur td{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.q p{margin:0}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);align-self:flex-start}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ans input[type=text],table.sum input{height:36px;font:inherit;font-family:var(--font-mono);font-size:14px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.ans input[type=text]{width:130px}
+.fb{font-size:14px;min-height:20px}
+.fb.ok,.okc{color:var(--ok)}
+.fb.bad,.badc{color:var(--bad)}
+.sol{border-left:3px solid var(--line);padding:2px 0 2px 12px;font-size:14px;color:var(--muted)}
+.sol p{margin:2px 0}
+.sol[hidden]{display:none}
+.opts{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opts button{text-align:left}
+.opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.score{font-family:var(--font-mono);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 14px;padding:0;list-style:none}
+.facts li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts li b{display:block;font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+.facts li span{color:var(--muted)}
+.code{position:relative;margin:0 0 14px}
+.code pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.55}
+.code button{position:absolute;top:8px;right:8px;min-height:30px;padding:3px 10px;font-size:12px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Machine vision · segmentation</p>
+    <h1>Image segmentation lab</h1>
+    <p class="lede">Otsu thresholding, K-means, mean shift, split and merge and watershed side by side, then contours: area, perimeter and compactness.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="coins" aria-pressed="true">Coins</button>
+      <button type="button" data-v="landscape" aria-pressed="false">Landscape</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">Stored as 128 × 128 gray pixels. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const S=128,SS=S*S;
+function clamp8(v){return v<0?0:v>255?255:v;}
+function histo(a){const h=new Uint32Array(256);for(let i=0;i<a.length;i++)h[a[i]]++;return h;}
+function minMax(a){let mn=255,mx=0;for(let i=0;i<a.length;i++){if(a[i]<mn)mn=a[i];if(a[i]>mx)mx=a[i];}return [mn,mx];}
+function cumul(h){const c=new Float64Array(h.length);let s=0;for(let i=0;i<h.length;i++){s+=h[i];c[i]=s;}return c;}
+function stretchRaw(v,imin,imax,omin,omax){return (v-imin)/(imax-imin)*(omax-omin)+omin;}
+function stretch8(v,imin,imax){return clamp8(Math.round(stretchRaw(v,imin,imax,0,255)));}
+function pctLimits(h,n,p){
+  const c=cumul(h);let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(c[v]>p*n){lo=v;break;}}
+  for(let v=255;v>=0;v--){const above=n-(v>0?c[v-1]:0);if(above>p*n){hi=v;break;}}
+  return [lo,hi];
+}
+function peakLimits(h,f){
+  let mx=0;for(let i=0;i<256;i++)if(h[i]>mx)mx=h[i];
+  const thr=f*mx;let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(h[v]>thr){lo=v;break;}}
+  for(let v=255;v>=0;v--){if(h[v]>thr){hi=v;break;}}
+  return [lo,hi,thr];
+}
+function eqLUT(h,n,mode){
+  const L=h.length,lut=new Array(L);let s=0;
+  for(let k=0;k<L;k++){s+=h[k];const x=(L-1)*s/n;lut[k]=mode==='floor'?Math.floor(x+1e-9):Math.round(x);}
+  return lut;
+}
+function eqLUTcv(h,n){
+  const lut=new Array(256).fill(0);let i=0;
+  while(i<256&&h[i]===0)i++;
+  if(i===256)return lut;
+  if(h[i]===n)return lut.fill(i);
+  const scale=255/(n-h[i]);let sum=0;lut[i]=0;i++;
+  for(;i<256;i++){sum+=h[i];lut[i]=Math.round(sum*scale);}
+  return lut;
+}
+function applyLUT(a,lut){const o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++)o[i]=lut[a[i]];return o;}
+function gammaV(v,g){return Math.round(255*Math.pow(v/255,g));}
+function linV(v,k,b){return clamp8(Math.round((v-128)*k+128+b));}
+function sCurveV(v,k){const x=v/255-0.5;return clamp8(Math.round(255*(Math.tanh(k*x)/(2*Math.tanh(k/2))+0.5)));}
+function meanStd(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];const m=s/a.length;let q=0;for(let i=0;i<a.length;i++){const d=a[i]-m;q+=d*d;}return [m,Math.sqrt(q/a.length)];}
+function levelsUsed(h){let c=0;for(let i=0;i<h.length;i++)if(h[i])c++;return c;}
+function lcg(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function makeDull(base,c,shift){
+  const lo=(255-255*c)/2,o=new Uint8ClampedArray(base.length);
+  for(let i=0;i<base.length;i++)o[i]=clamp8(Math.round(lo+base[i]*c+shift));
+  return o;
+}
+function addOutliers(a){
+  const o=Uint8ClampedArray.from(a);
+  for(let k=0;k<16;k++){const i=(k*2711+97)%a.length;o[i]=k%2?0:255;}
+  return o;
+}
+//CORE-END
+
+const BIG=720;
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function fmt(n){return n.toLocaleString('en-US');}
+function num(x,d){const k=Math.pow(10,d==null?3:d);const r=Math.round(x*k)/k;return String(Object.is(r,-0)?0:r);}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${String(o[0])===String(cur)}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+  return g;
+}
+function slider(id,label,min,max,val,step,suffix){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}${suffix||''}</output></label>`;
+}
+function bindSlider(root,id,cb,suffix){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=num(v,2)+(suffix||'');};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(+s.value);},get:()=>+s.value,el:s};
+}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function cellAt(cv,e,n){
+  const r=cv.getBoundingClientRect();
+  let x=Math.floor((e.clientX-r.left)/r.width*n),y=Math.floor((e.clientY-r.top)/r.height*n);
+  x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));
+  return {x,y};
+}
+function imgCard(label,extra,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" class="${extra||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(S,S),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function grayCard(card,arr){
+  const d=card.img.data;
+  for(let i=0;i<SS;i++){const o=i*4;d[o]=d[o+1]=d[o+2]=arr[i];d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function histCard(label,cap,w,h){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${w||512}" height="${h||170}" class="wide" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function chartCard(label,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="300" height="300" class="chart" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function histDraw(cv,h,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=16,pt=8;
+  const cMain=css(o.color||'--in'),cLine=css('--line'),cMut=css('--muted'),cAcc=css('--accent');
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  let mx=o.max||1;if(!o.max){for(let i=0;i<h.length;i++)if(h[i]>mx)mx=h[i];}
+  const bw=W/h.length,ph=H-pb-pt;
+  for(let i=0;i<h.length;i++){
+    const hh=h[i]/mx*ph;
+    g.fillStyle=(o.shade!=null&&i>o.shade)?cLine:cMain;
+    g.fillRect(i*bw,H-pb-hh,bw+0.5,hh);
+  }
+  g.fillStyle=cMut;g.fillRect(0,H-pb,W,1);
+  g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  [0,64,128,192,255].forEach(v=>{const x=(v+0.5)*W/256;g.fillRect(x,H-pb,1,4);g.textAlign=v===0?'left':v===255?'right':'center';g.fillText(String(v),v===0?1:v===255?W-1:x,H-3);});
+  if(o.cdf){
+    const c=cumul(h),tot=c[c.length-1]||1;g.strokeStyle=css('--ok');g.lineWidth=2;g.beginPath();
+    for(let i=0;i<h.length;i++){const x=(i+0.5)*bw,y=H-pb-c[i]/tot*ph;if(i===0)g.moveTo(x,y);else g.lineTo(x,y);}
+    g.stroke();
+  }
+  if(o.hline!=null){
+    const y=H-pb-o.hline/mx*ph;g.strokeStyle=cAcc;g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.setLineDash([]);
+  }
+  (o.markers||[]).forEach(m=>{
+    const x=(m.x+0.5)*bw;g.strokeStyle=m.color||cAcc;g.lineWidth=2;g.beginPath();g.moveTo(x,pt-4);g.lineTo(x,H-pb);g.stroke();
+    if(m.label){g.fillStyle=m.color||cAcc;g.textAlign=m.x>200?'right':'left';g.fillText(m.label,x+(m.x>200?-4:4),pt+6);}
+  });
+}
+function mapDraw(cv,series,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pl=30,pr=10,pt=10,pb=26;
+  const xd=o.xdom||[0,255],yd=o.ydom||[0,255];
+  const fx=x=>pl+(x-xd[0])/(xd[1]-xd[0])*(W-pl-pr),fy=y=>H-pb-(y-yd[0])/(yd[1]-yd[0])*(H-pb-pt);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  const D=o.div||4,ks=Array.from({length:D+1},(_,i)=>i);
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();
+  ks.forEach(k=>{const x=pl+k*(W-pl-pr)/D,y=pt+k*(H-pt-pb)/D;g.moveTo(x,pt);g.lineTo(x,H-pb);g.moveTo(pl,y);g.lineTo(W-pr,y);});
+  g.stroke();
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  g.textAlign='center';ks.forEach(k=>{const v=xd[0]+k*(xd[1]-xd[0])/D;g.fillText(num(v,xd[1]-xd[0]>=20?0:2),pl+k*(W-pl-pr)/D,H-12);});
+  g.textAlign='right';ks.forEach(k=>{const v=yd[0]+k*(yd[1]-yd[0])/D;g.fillText(num(v,yd[1]-yd[0]>=20?0:2),pl-4,H-pb-k*(H-pt-pb)/D+4);});
+  g.textAlign='right';g.fillText(o.xl||'input →',W-pr,H-1);g.textAlign='left';g.fillText(o.yl||'output ↑',pl+4,pt+9);
+  if(!o.nodiag&&xd[0]===yd[0]&&xd[1]===yd[1]){
+    g.setLineDash([4,4]);g.strokeStyle=css('--muted');g.lineWidth=1;g.beginPath();g.moveTo(fx(xd[0]),fy(yd[0]));g.lineTo(fx(xd[1]),fy(yd[1]));g.stroke();g.setLineDash([]);
+  }
+  series.forEach(s=>{
+    const pts=s.pts||Array.from(s.lut,(y,x)=>[x,y]);
+    g.strokeStyle=s.color?css(s.color):css('--ink');g.lineWidth=s.w||2.5;
+    g.setLineDash(s.dash||[]);g.beginPath();
+    if(!s.dots){pts.forEach((p,i)=>{const x=fx(p[0]),y=fy(p[1]);if(i===0)g.moveTo(x,y);else g.lineTo(x,y);});g.stroke();}
+    g.setLineDash([]);
+    if(s.dots){g.fillStyle=s.color?css(s.color):css('--ink');pts.forEach(p=>{g.beginPath();g.arc(fx(p[0]),fy(p[1]),4,0,2*Math.PI);g.fill();});}
+  });
+  (o.vlines||[]).forEach(x=>{g.strokeStyle=css('--accent');g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(fx(x),pt);g.lineTo(fx(x),H-pb);g.stroke();g.setLineDash([]);});
+  (o.points||[]).forEach(p=>{
+    g.fillStyle=css(p.color||'--accent');g.beginPath();g.arc(fx(p.x),fy(p.y),p.r||6,0,2*Math.PI);g.fill();
+    g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+  });
+}
+function codeBlock(getText){
+  const w=el('<div class="code"><pre></pre><button type="button">Copy</button></div>');
+  const pre=w.querySelector('pre'),btn=w.querySelector('button');
+  function refresh(){pre.textContent=getText();}
+  btn.addEventListener('click',async()=>{
+    const t=pre.textContent;let done=false;
+    try{await navigator.clipboard.writeText(t);done=true;btn.textContent='Copied';}catch(e){}
+    if(!done){
+      try{const r=document.createRange();r.selectNodeContents(pre);const s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';}catch(e){btn.textContent='Select text';}
+    }
+    setTimeout(()=>{btn.textContent='Copy';},1600);
+  });
+  refresh();
+  return {el:w,refresh};
+}
+function statsLine(a){
+  const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);
+  return `mean <b>${m.toFixed(0)}</b> · spread (std) <b>${sd.toFixed(0)}</b> · range <b>${mn}</b> to <b>${mx}</b>`;
+}
+
+/* ---------- images ---------- */
+let LAST_RGBA=null;
+function noisyGray(rgba,seed,amp){
+  const g=new Uint8ClampedArray(SS),r=lcg(seed);
+  for(let i=0;i<SS;i++){
+    const v=0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]+(r()+r()-1)*amp;
+    g[i]=Math.round(v<0?0:v>255?255:v);
+  }
+  return g;
+}
+function sceneLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  g.scale(0.5,0.5);
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,256,256);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,256,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,256,1);
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,11,6);
+}
+function sceneShapes(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,S);bg.addColorStop(0,'#141a22');bg.addColorStop(1,'#2a3340');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  g.fillStyle='#8c97a8';g.fillRect(14,70,40,40);g.fillRect(76,18,36,30);g.fillRect(70,84,44,30);
+  g.fillStyle='#ebe6d4';
+  [[34,34,16],[98,70,11],[40,92,9],[104,104,8]].forEach(a=>{g.beginPath();g.arc(a[0],a[1],a[2],0,2*Math.PI);g.fill();});
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,23,8);
+}
+function sceneCoins(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,S,S);bg.addColorStop(0,'#f4f1ea');bg.addColorStop(1,'#e4dfd3');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  const coin=(x,y,r,a,b)=>{
+    const rg=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);rg.addColorStop(0,a);rg.addColorStop(1,b);
+    g.fillStyle=rg;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1.2;g.beginPath();g.arc(x,y,r*0.72,0,2*Math.PI);g.stroke();
+  };
+  const GOLD=['#c99a24','#85620c'],COP=['#b8714a','#7a3f20'],SIL=['#a2adb8','#5f6a76'];
+  [[24,26,15,GOLD],[51,24,13,SIL],[92,28,14,COP],[113,34,10,GOLD],[30,66,12,COP],[60,70,16,GOLD],[94,72,12,SIL],[22,104,11,SIL],[52,102,13,GOLD],[84,104,15,COP],[107,99,9,SIL]].forEach(k=>coin(k[0],k[1],k[2],k[3][0],k[3][1]));
+  const id=g.getImageData(0,0,S,S).data,r=lcg(31),o=new Uint8ClampedArray(SS*4),gr=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const n=(r()+r()-1)*6;
+    for(let k=0;k<3;k++)o[i*4+k]=Math.round(Math.max(0,Math.min(255,id[i*4+k]+n)));
+    o[i*4+3]=255;
+    gr[i]=Math.round(0.299*o[i*4]+0.587*o[i*4+1]+0.114*o[i*4+2]);
+  }
+  LAST_RGBA=o;
+  return gr;
+}
+
+/* ---------- app frame ---------- */
+const App={base:null,name:'Landscape',views:[],panels:[],cur:0,steps:[]};
+function setBase(gray,name,rgba){App.base=gray;App.name=name;if(rgba)App.rgba=rgba;const v=App.views[App.cur];if(v)v.update();}
+const SCENES={landscape:['Landscape',()=>sceneLandscape()],shapes:['Shapes',()=>sceneShapes()],coins:['Coins',()=>sceneCoins()]};
+function initApp(steps,start){
+  App.steps=steps;start=start||'landscape';
+  const stage=$('#stage'),nav=$('#steps');
+  steps.forEach((s,i)=>{
+    const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+    b.addEventListener('click',()=>go(i));
+    nav.appendChild(b);
+    const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);App.panels.push(p);App.views.push(null);
+  });
+  function go(i){
+    const old=App.views[App.cur];if(old&&old.stop)old.stop();
+    App.cur=i;
+    App.panels.forEach((p,j)=>{p.hidden=j!==i;});
+    nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+    if(!App.views[i])App.views[i]=steps[i].build(App.panels[i]);
+    App.views[i].update();
+    $('#back').hidden=i===0;
+    $('#next').textContent=i===steps.length-1?'Start again':'Next';
+  }
+  $('#back').addEventListener('click',()=>go(Math.max(0,App.cur-1)));
+  $('#next').addEventListener('click',()=>go(App.cur===steps.length-1?0:App.cur+1));
+  const srcBtns=[...document.querySelectorAll('#src button')];
+  const setSource=v=>srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  const msg=$('#srcmsg'),DEF='Stored as 128 × 128 gray pixels. Everything runs in your browser.';
+  $('#src').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    const v=b.dataset.v;
+    if(SCENES[v]){setSource(v);msg.textContent=DEF;const gr=SCENES[v][1]();setBase(gr,SCENES[v][0],LAST_RGBA);}
+    else{$('#file').click();}
+  });
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+        const s=Math.min(im.width,im.height);
+        g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        const d=g.getImageData(0,0,S,S).data,gr=new Uint8ClampedArray(SS);
+        for(let i=0;i<SS;i++)gr[i]=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+        setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 128 × 128.';
+        setBase(gr,f.name,Uint8ClampedArray.from(d));
+      };
+      im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+      im.src=r.result;
+    };
+    r.onerror=()=>{msg.textContent='That file could not be read.';};
+    r.readAsDataURL(f);
+    e.target.value='';
+  });
+  if(window.matchMedia){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const rr=()=>{const v=App.views[App.cur];if(v)v.update();};
+    if(mq.addEventListener)mq.addEventListener('change',rr);
+  }
+  App.base=SCENES[start][1]();App.rgba=LAST_RGBA;
+  go(0);
+  App.go=go;
+}
+
+//SEG-CORE-START
+function otsu(h,n){
+  let tot=0;for(let i=0;i<256;i++)tot+=i*h[i];
+  const sig=new Float64Array(256),sw=new Float64Array(256),W0=new Float64Array(256),M0=new Float64Array(256),M1=new Float64Array(256),V0=new Float64Array(256),V1=new Float64Array(256);
+  let c=0,s0=0,q0=0,best=-1,bt=0,sq=0;for(let i=0;i<256;i++)sq+=i*i*h[i];
+  for(let t=0;t<256;t++){
+    c+=h[t];s0+=t*h[t];q0+=t*t*h[t];
+    const w0=c/n,w1=1-w0;W0[t]=w0;
+    if(c===0||c===n){M0[t]=c?s0/c:0;M1[t]=n-c?(tot-s0)/(n-c):0;continue;}
+    const m0=s0/c,m1=(tot-s0)/(n-c);M0[t]=m0;M1[t]=m1;
+    V0[t]=q0/c-m0*m0;V1[t]=(sq-q0)/(n-c)-m1*m1;
+    sig[t]=w0*w1*(m0-m1)*(m0-m1);sw[t]=w0*V0[t]+w1*V1[t];
+    if(sig[t]>best){best=sig[t];bt=t;}
+  }
+  return {t:bt,sig,sw,w0:W0,m0:M0,m1:M1,v0:V0,v1:V1,total:sq/n-(tot/n)*(tot/n)};
+}
+function kmInit(F,n,d,k,seed){
+  const r=lcg(seed),C=new Float64Array(k*d),D=new Float64Array(n).fill(Infinity);
+  let i0=Math.floor(r()*n);for(let j=0;j<d;j++)C[j]=F[i0*d+j];
+  for(let c=1;c<k;c++){
+    let sum=0;
+    for(let i=0;i<n;i++){let dd=0;for(let j=0;j<d;j++){const v=F[i*d+j]-C[(c-1)*d+j];dd+=v*v;}if(dd<D[i])D[i]=dd;sum+=D[i];}
+    let t=r()*sum,idx=n-1;for(let i=0;i<n;i++){t-=D[i];if(t<=0){idx=i;break;}}
+    for(let j=0;j<d;j++)C[c*d+j]=F[idx*d+j];
+  }
+  return C;
+}
+function kmAssign(F,n,d,C,k){
+  const L=new Uint8Array(n);let inertia=0;
+  for(let i=0;i<n;i++){
+    let b=0,bd=Infinity;
+    for(let c=0;c<k;c++){let dd=0;for(let j=0;j<d;j++){const v=F[i*d+j]-C[c*d+j];dd+=v*v;}if(dd<bd){bd=dd;b=c;}}
+    L[i]=b;inertia+=bd;
+  }
+  return {L,inertia};
+}
+function kmUpdate(F,L,n,d,k,C){
+  const N=new Float64Array(k*d),cnt=new Float64Array(k);
+  for(let i=0;i<n;i++){const c=L[i];cnt[c]++;for(let j=0;j<d;j++)N[c*d+j]+=F[i*d+j];}
+  for(let c=0;c<k;c++)for(let j=0;j<d;j++)N[c*d+j]=cnt[c]?N[c*d+j]/cnt[c]:C[c*d+j];
+  return N;
+}
+function kmRun(F,n,d,k,seed,maxIter){
+  let C=kmInit(F,n,d,k,seed),a=kmAssign(F,n,d,C,k);
+  const hist=[{C,L:a.L,inertia:a.inertia}];
+  for(let it=1;it<=maxIter;it++){
+    C=kmUpdate(F,a.L,n,d,k,C);const b=kmAssign(F,n,d,C,k);
+    let same=true;for(let i=0;i<n;i++)if(b.L[i]!==a.L[i]){same=false;break;}
+    hist.push({C,L:b.L,inertia:b.inertia});a=b;
+    if(same)break;
+  }
+  return hist;
+}
+function meanShift(rgba,sp,sr,maxIter,eps){
+  const out=new Uint8ClampedArray(SS*4),sr2=sr*sr;
+  for(let y0=0;y0<S;y0++)for(let x0=0;x0<S;x0++){
+    const p0=(y0*S+x0)*4;
+    let x=x0,y=y0,c0=rgba[p0],c1=rgba[p0+1],c2=rgba[p0+2];
+    for(let it=0;it<maxIter;it++){
+      const mnx=Math.max(0,x-sp),mxx=Math.min(S-1,x+sp),mny=Math.max(0,y-sp),mxy=Math.min(S-1,y+sp);
+      let sx=0,sy=0,s0=0,s1=0,s2=0,cnt=0;
+      for(let yy=mny;yy<=mxy;yy++)for(let xx=mnx;xx<=mxx;xx++){
+        const p=(yy*S+xx)*4,t0=rgba[p]-c0,t1=rgba[p+1]-c1,t2=rgba[p+2]-c2;
+        if(t0*t0+t1*t1+t2*t2<=sr2){sx+=xx;sy+=yy;s0+=rgba[p];s1+=rgba[p+1];s2+=rgba[p+2];cnt++;}
+      }
+      if(!cnt)break;
+      const nx=Math.round(sx/cnt),ny=Math.round(sy/cnt),n0=s0/cnt,n1=s1/cnt,n2=s2/cnt;
+      const d=(nx-x)*(nx-x)+(ny-y)*(ny-y)+(n0-c0)*(n0-c0)+(n1-c1)*(n1-c1)+(n2-c2)*(n2-c2);
+      x=nx;y=ny;c0=n0;c1=n1;c2=n2;
+      if(d<=eps*eps)break;
+    }
+    out[p0]=Math.round(c0);out[p0+1]=Math.round(c1);out[p0+2]=Math.round(c2);out[p0+3]=255;
+  }
+  return out;
+}
+function meanShiftPath(rgba,x0,y0,sp,sr,maxIter){
+  const sr2=sr*sr,p0=(y0*S+x0)*4;let x=x0,y=y0,c0=rgba[p0],c1=rgba[p0+1],c2=rgba[p0+2];const path=[[x,y]];
+  for(let it=0;it<maxIter;it++){
+    const mnx=Math.max(0,x-sp),mxx=Math.min(S-1,x+sp),mny=Math.max(0,y-sp),mxy=Math.min(S-1,y+sp);
+    let sx=0,sy=0,s0=0,s1=0,s2=0,cnt=0;
+    for(let yy=mny;yy<=mxy;yy++)for(let xx=mnx;xx<=mxx;xx++){const p=(yy*S+xx)*4,t0=rgba[p]-c0,t1=rgba[p+1]-c1,t2=rgba[p+2]-c2;if(t0*t0+t1*t1+t2*t2<=sr2){sx+=xx;sy+=yy;s0+=rgba[p];s1+=rgba[p+1];s2+=rgba[p+2];cnt++;}}
+    if(!cnt)break;
+    const nx=Math.round(sx/cnt),ny=Math.round(sy/cnt),n0=s0/cnt,n1=s1/cnt,n2=s2/cnt;
+    const d=(nx-x)*(nx-x)+(ny-y)*(ny-y)+(n0-c0)*(n0-c0)+(n1-c1)*(n1-c1)+(n2-c2)*(n2-c2);
+    x=nx;y=ny;c0=n0;c1=n1;c2=n2;path.push([x,y]);if(d<=1)break;
+  }
+  return {path,color:[c0,c1,c2]};
+}
+function labelByColour(rgba,thr){
+  const L=new Int32Array(SS).fill(-1),means=[];let n=0;const st=[];
+  for(let s=0;s<SS;s++){
+    if(L[s]>=0)continue;
+    L[s]=n;st.length=0;st.push(s);let r=0,g=0,b=0,c=0;
+    const sr=rgba[s*4],sg=rgba[s*4+1],sb=rgba[s*4+2];
+    while(st.length){
+      const p=st.pop(),x=p%S,y=(p/S)|0;r+=rgba[p*4];g+=rgba[p*4+1];b+=rgba[p*4+2];c++;
+      for(const q of [x>0?p-1:-1,x<S-1?p+1:-1,y>0?p-S:-1,y<S-1?p+S:-1]){
+        if(q<0||L[q]>=0)continue;
+        const t0=rgba[q*4]-rgba[p*4],t1=rgba[q*4+1]-rgba[p*4+1],t2=rgba[q*4+2]-rgba[p*4+2];
+        if(t0*t0+t1*t1+t2*t2<=thr*thr){L[q]=n;st.push(q);}
+      }
+    }
+    means.push([r/c,g/c,b/c,c]);n++;
+  }
+  return {L,means,n};
+}
+function cleanSmall(L,means,minArea){
+  const n=means.length,area=means.map(m=>m[3]),mean=means.map(m=>[m[0],m[1],m[2]]),adj=Array.from({length:n},()=>new Set()),alive=new Array(n).fill(true),to=Int32Array.from({length:n},(_,i)=>i);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const a=L[y*S+x];if(x<S-1){const b=L[y*S+x+1];if(a!==b){adj[a].add(b);adj[b].add(a);}}if(y<S-1){const b=L[(y+1)*S+x];if(a!==b){adj[a].add(b);adj[b].add(a);}}}
+  const order=Array.from({length:n},(_,i)=>i).sort((a,b)=>area[a]-area[b]);
+  for(const s of order){
+    if(!alive[s]||area[s]>=minArea||!adj[s].size)continue;
+    let best=-1,bd=Infinity;
+    for(const u of adj[s]){const d=Math.hypot(mean[s][0]-mean[u][0],mean[s][1]-mean[u][1],mean[s][2]-mean[u][2]);if(d<bd){bd=d;best=u;}}
+    const t=best,tot=area[s]+area[t];
+    for(let c=0;c<3;c++)mean[t][c]=(mean[t][c]*area[t]+mean[s][c]*area[s])/tot;
+    area[t]=tot;alive[s]=false;to[s]=t;
+    for(const u of adj[s]){adj[u].delete(s);if(u!==t){adj[u].add(t);adj[t].add(u);}}
+    adj[t].delete(s);adj[s].clear();
+  }
+  const find=i=>{while(to[i]!==i)i=to[i];return i;};
+  const id=new Int32Array(n).fill(-1),out=[];let m=0;
+  for(let i=0;i<n;i++){if(alive[i]){id[i]=m++;out.push([mean[i][0],mean[i][1],mean[i][2],area[i]]);}}
+  const L2=new Int32Array(SS);for(let p=0;p<SS;p++)L2[p]=id[find(L[p])];
+  return {L:L2,means:out,n:m};
+}
+function msSegments(res,sr){const l=labelByColour(res,Math.max(3,sr*0.4));return cleanSmall(l.L,l.means,40);}
+function splitMerge(rgba,splitT,minSize,mergeT){
+  const leaves=[];
+  const ranges=(x,y,s)=>{
+    let mn=[255,255,255],mx=[0,0,0];
+    for(let j=y;j<y+s;j++)for(let i=x;i<x+s;i++){const p=(j*S+i)*4;for(let c=0;c<3;c++){const v=rgba[p+c];if(v<mn[c])mn[c]=v;if(v>mx[c])mx[c]=v;}}
+    return Math.max(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2]);
+  };
+  const rec=(x,y,s)=>{
+    if(s>minSize&&ranges(x,y,s)>splitT){const h=s>>1;rec(x,y,h);rec(x+h,y,h);rec(x,y+h,h);rec(x+h,y+h,h);}
+    else leaves.push({x,y,s});
+  };
+  rec(0,0,S);
+  const N=leaves.length,id=new Int32Array(SS);
+  leaves.forEach((l,i)=>{let r=0,g=0,b=0;for(let j=l.y;j<l.y+l.s;j++)for(let k=l.x;k<l.x+l.s;k++){const p=(j*S+k);id[p]=i;r+=rgba[p*4];g+=rgba[p*4+1];b+=rgba[p*4+2];}const a=l.s*l.s;l.m=[r/a,g/a,b/a];l.a=a;});
+  const edges=new Set();
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const a=id[y*S+x];if(x<S-1){const b=id[y*S+x+1];if(a!==b)edges.add(a<b?a*N+b:b*N+a);}if(y<S-1){const b=id[(y+1)*S+x];if(a!==b)edges.add(a<b?a*N+b:b*N+a);}}
+  const par=Int32Array.from({length:N},(_,i)=>i),sum=leaves.map(l=>[l.m[0]*l.a,l.m[1]*l.a,l.m[2]*l.a,l.a]);
+  const find=i=>{while(par[i]!==i){par[i]=par[par[i]];i=par[i];}return i;};
+  const pairs=Array.from(edges,e=>[Math.floor(e/N),e%N]);
+  const mean=r=>[sum[r][0]/sum[r][3],sum[r][1]/sum[r][3],sum[r][2]/sum[r][3]];
+  const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+  let changed=true,guard=0;
+  while(changed&&guard++<50){
+    changed=false;
+    const cand=[];
+    for(const [a,b] of pairs){const ra=find(a),rb=find(b);if(ra!==rb){const d=dist(mean(ra),mean(rb));if(d<=mergeT)cand.push([d,ra,rb]);}}
+    cand.sort((p,q)=>p[0]-q[0]);
+    for(const [d,a,b] of cand){const ra=find(a),rb=find(b);if(ra===rb)continue;if(dist(mean(ra),mean(rb))>mergeT)continue;par[rb]=ra;for(let c=0;c<4;c++)sum[ra][c]+=sum[rb][c];changed=true;}
+  }
+  const roots=new Map(),L=new Int32Array(SS);let R=0;const means=[];
+  for(let i=0;i<N;i++){const r=find(i);if(!roots.has(r)){roots.set(r,R++);means.push(mean(r));}}
+  for(let p=0;p<SS;p++)L[p]=roots.get(find(id[p]));
+  return {leaves,L,n:R,means};
+}
+function edt(mask){
+  const INF=1e20,f=new Float64Array(SS),tmp=new Float64Array(SS),out=new Float64Array(SS);
+  for(let i=0;i<SS;i++)f[i]=mask[i]?INF:0;
+  const v=new Int32Array(S),z=new Float64Array(S+1),g=new Float64Array(S),dd=new Float64Array(S);
+  const dt1=(src,dst)=>{
+    let k=0;v[0]=0;z[0]=-INF;z[1]=INF;
+    for(let q=1;q<S;q++){
+      let s;
+      while(true){const p=v[k];s=((src[q]+q*q)-(src[p]+p*p))/(2*q-2*p);if(s<=z[k]&&k>0)k--;else break;}
+      if(s<=z[k]&&k===0){v[0]=q;z[0]=-INF;z[1]=INF;continue;}
+      k++;v[k]=q;z[k]=s;z[k+1]=INF;
+    }
+    k=0;for(let q=0;q<S;q++){while(z[k+1]<q)k++;dst[q]=(q-v[k])*(q-v[k])+src[v[k]];}
+  };
+  for(let x=0;x<S;x++){for(let y=0;y<S;y++)g[y]=f[y*S+x];dt1(g,dd);for(let y=0;y<S;y++)tmp[y*S+x]=dd[y];}
+  for(let y=0;y<S;y++){for(let x=0;x<S;x++)g[x]=tmp[y*S+x];dt1(g,dd);for(let x=0;x<S;x++)out[y*S+x]=Math.sqrt(dd[x]);}
+  return out;
+}
+function morph(mask,op,iters){
+  let a=Uint8Array.from(mask);
+  for(let it=0;it<iters;it++){
+    const b=new Uint8Array(SS);
+    for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+      let v=op==='erode'?1:0;
+      for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){
+        const xx=x+i,yy=y+j;const u=(xx<0||yy<0||xx>=S||yy>=S)?(op==='erode'?1:0):a[yy*S+xx];
+        if(op==='erode'){if(!u)v=0;}else if(u)v=1;
+      }
+      b[y*S+x]=v;
+    }
+    a=b;
+  }
+  return a;
+}
+function ccLabel(mask,conn8){
+  const L=new Int32Array(SS),st=[];let n=0;
+  for(let s=0;s<SS;s++){
+    if(!mask[s]||L[s])continue;
+    n++;L[s]=n;st.length=0;st.push(s);
+    while(st.length){
+      const p=st.pop(),x=p%S,y=(p/S)|0;
+      for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){
+        if(!i&&!j)continue;if(!conn8&&i&&j)continue;
+        const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=S||yy>=S)continue;
+        const q=yy*S+xx;if(mask[q]&&!L[q]){L[q]=n;st.push(q);}
+      }
+    }
+  }
+  return {L,n};
+}
+function compStats(L,n,nb8){
+  const st=Array.from({length:n+1},()=>({area:0,per:0,sx:0,sy:0,x0:S,y0:S,x1:-1,y1:-1}));
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    const l=L[y*S+x];if(!l)continue;const s=st[l];
+    s.area++;s.sx+=x;s.sy+=y;if(x<s.x0)s.x0=x;if(y<s.y0)s.y0=y;if(x>s.x1)s.x1=x;if(y>s.y1)s.y1=y;
+    let edge=false;
+    for(let j=-1;j<=1&&!edge;j++)for(let i=-1;i<=1;i++){
+      if(!i&&!j)continue;if(!nb8&&i&&j)continue;
+      const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=S||yy>=S||L[yy*S+xx]!==l){edge=true;break;}
+    }
+    if(edge)s.per++;
+  }
+  for(let l=1;l<=n;l++){const s=st[l];s.cx=s.sx/s.area;s.cy=s.sy/s.area;s.compact=s.per*s.per/(4*Math.PI*s.area);}
+  return st;
+}
+function wsRun(rgba,markers){
+  const L=Int32Array.from(markers),Q=Array.from({length:766},()=>[]);
+  const cost=(p,q)=>Math.abs(rgba[p*4]-rgba[q*4])+Math.abs(rgba[p*4+1]-rgba[q*4+1])+Math.abs(rgba[p*4+2]-rgba[q*4+2]);
+  const nbs=p=>{const x=p%S,y=(p/S)|0,o=[];if(x>0)o.push(p-1);if(x<S-1)o.push(p+1);if(y>0)o.push(p-S);if(y<S-1)o.push(p+S);return o;};
+  const inq=new Uint8Array(SS);
+  for(let p=0;p<SS;p++)if(L[p]>0)for(const q of nbs(p))if(L[q]===0&&!inq[q]){inq[q]=1;Q[cost(p,q)].push(q);}
+  for(let lev=0;lev<766;lev++){
+    const q=Q[lev];
+    for(let h=0;h<q.length;h++){
+      const p=q[h];if(L[p]!==0)continue;
+      let lab=0,mixed=false;
+      for(const r of nbs(p)){const l=L[r];if(l>0){if(!lab)lab=l;else if(l!==lab)mixed=true;}}
+      if(mixed){L[p]=-1;continue;}
+      if(!lab)continue;
+      L[p]=lab;
+      for(const r of nbs(p))if(L[r]===0&&!inq[r]){inq[r]=1;Q[Math.max(lev,cost(p,r))].push(r);}
+    }
+  }
+  return L;
+}
+function gradMag(gray){
+  const o=new Float32Array(SS);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    const x0=Math.max(0,x-1),x1=Math.min(S-1,x+1),y0=Math.max(0,y-1),y1=Math.min(S-1,y+1);
+    const gx=gray[y*S+x1]-gray[y*S+x0],gy=gray[y1*S+x]-gray[y0*S+x];o[y*S+x]=Math.sqrt(gx*gx+gy*gy);
+  }
+  return o;
+}
+//SEG-CORE-END
+
+function paintC(card,arr){card.img.data.set(arr);card.ctx.putImageData(card.img,0,0);}
+function paintRGBA(card,fn){const d=card.img.data;for(let i=0;i<SS;i++){const c=fn(i),q=i*4;d[q]=c[0];d[q+1]=c[1];d[q+2]=c[2];d[q+3]=255;}card.ctx.putImageData(card.img,0,0);}
+function fillMeans(L,means){const o=new Uint8ClampedArray(SS*4);for(let i=0;i<SS;i++){const m=means[L[i]];o[i*4]=m[0];o[i*4+1]=m[1];o[i*4+2]=m[2];o[i*4+3]=255;}return o;}
+function boundaries(L,rgba,col){
+  const o=Uint8ClampedArray.from(rgba);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    const p=y*S+x,l=L[p];let b=l<0;
+    if(!b){if(x<S-1&&L[p+1]!==l&&L[p+1]>=0&&l>=0)b=true;else if(y<S-1&&L[p+S]!==l&&L[p+S]>=0&&l>=0)b=true;}
+    if(b){o[p*4]=col[0];o[p*4+1]=col[1];o[p*4+2]=col[2];}
+  }
+  return o;
+}
+const PALETTE=[[230,57,70],[42,157,143],[69,123,230],[244,162,97],[155,89,182],[46,204,113],[241,196,15],[26,188,156],[231,76,60],[52,152,219],[149,165,166],[211,84,0]];
+function pal(i){return PALETTE[i%PALETTE.length];}
+function grid(w){return el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,${w}px),1fr))"></div>`);}
+function debounce(fn,ms){let t=0;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+function countOn(m){let n=0;for(let i=0;i<m.length;i++)if(m[i])n++;return n;}
+function swatches(items){return items.map(i=>`<span class="swatch" style="background:${i[0]}"></span>${i[1]}`).join(' <span style="display:inline-block;width:8px"></span>');}
+function rgbCss(c){return `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;}
+function rgbaOf(){return App.rgba||(()=>{const o=new Uint8ClampedArray(SS*4);for(let i=0;i<SS;i++){o[i*4]=o[i*4+1]=o[i*4+2]=App.base[i];o[i*4+3]=255;}return o;})();}
+function grayFrom(rgba){const g=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)g[i]=Math.round(0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]);return g;}
+function darkObjects(gray,t){let b=0;for(let i=0;i<SS;i++)if(gray[i]<=t)b++;return b<SS/2;}
+function otsuMask(gray){
+  const h=histo(gray),o=otsu(h,SS),dark=darkObjects(gray,o.t),m=new Uint8Array(SS);
+  for(let i=0;i<SS;i++)m[i]=dark?(gray[i]<=o.t?1:0):(gray[i]>o.t?1:0);
+  return {mask:m,t:o.t,dark};
+}
+function wsPipeline(rgba,gray,frac){
+  const om=otsuMask(gray),op=morph(morph(om.mask,'erode',1),'dilate',1),bg=morph(op,'dilate',3);
+  const dist=edt(op);let mx=0;for(let i=0;i<SS;i++)if(dist[i]>mx)mx=dist[i];
+  const fg=new Uint8Array(SS);for(let i=0;i<SS;i++)fg[i]=dist[i]>frac*mx?1:0;
+  const cc=ccLabel(fg,true),mk=new Int32Array(SS);
+  for(let i=0;i<SS;i++){if(fg[i])mk[i]=cc.L[i]+1;else if(!bg[i])mk[i]=1;else mk[i]=0;}
+  // sure background = outside the dilated mask; unknown ring = 0
+  const ws=wsRun(rgba,mk);
+  return {om,open:op,bg,dist,mx,fg,cc,markers:mk,ws,count:cc.n};
+}
+
+/* ---------- 1 · Otsu ---------- */
+function viewOtsu(root){
+  let mode='orig',t=128,stopA=null;
+  const A=imgCard('Gray image'),B=imgCard('Result: pixels above t are white');
+  const top=grid(240);top.append(A.el,B.el);
+  const H=histCard('Histogram: blue bars are at or below t, gray bars are above t','',720,200);
+  const V=histCard('Between-class variance σB²(t) for every possible t','',720,200);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Picture</span>${seg('mode',[['orig','Original'],['noise','Very noisy'],['uneven','Uneven lighting']],'orig')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('t','Threshold t',0,255,128)}<button type="button" id="jmp" class="primary">Jump to Otsu’s best t</button><button type="button" id="scan">Try every t</button></div>`);
+  const tbl=el('<div class="scroll"></div>');
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Otsu: let the histogram choose the threshold</h2>'),el('<p class="explain">A threshold t splits the pixels into a lower class (values 0 to t) and an upper class (t + 1 to 255). The tutorial calls them background and foreground, but which one is the object depends on the picture: here the coins are the dark class. Otsu tries <b>every</b> t and keeps the one where the two classes are <b>most different</b>: the largest between-class variance σB²(t) = ω₀ ω₁ (μ₀ − μ₁)². Drag t yourself first, then let Otsu find its best.</p>'),ctl,ctl2,top,H.el,V.el,tbl,info,note);
+  const st=bindSlider(root,'t',v=>{halt();t=v;render();});
+  bindSeg(root,'mode',v=>{halt();mode=v;render();});
+  $('#jmp',root).addEventListener('click',()=>{halt();t=cur().o.t;st.set(t);render();});
+  const sb=$('#scan',root);
+  function halt(){if(stopA){stopA();stopA=null;}sb.textContent='Try every t';}
+  sb.addEventListener('click',()=>{if(stopA){halt();return;}sb.textContent='Stop';stopA=animate(6000,p=>{t=Math.round(p*255);st.set(t);render();},()=>{stopA=null;sb.textContent='Try every t';});});
+  let cache=null;
+  function picture(){
+    const g=App.base,o=new Uint8ClampedArray(SS),r=lcg(5);
+    for(let i=0;i<SS;i++){
+      const x=i%S,y=(i/S)|0;let v=g[i];
+      if(mode==='noise'){const u=Math.max(r(),1e-9),w=r();v+=38*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w);}
+      if(mode==='uneven')v=v*(0.45+0.55*x/(S-1));
+      o[i]=Math.round(v);
+    }
+    return o;
+  }
+  function cur(){
+    if(cache&&cache.base===App.base&&cache.mode===mode)return cache;
+    const g=picture(),h=histo(g);return cache={base:App.base,mode,g,h,o:otsu(h,SS)};
+  }
+  function render(){
+    const c=cur(),{g,h,o}=c;
+    paintG(A,g);
+    const m=new Uint8Array(SS);for(let i=0;i<SS;i++)m[i]=g[i]>t?1:0;paintMask(B,m);
+    histDraw(H.cv,h,{color:'--in',shade:t,markers:[{x:t,label:'t = '+t}]});
+    const mx=Math.max(...o.sig)*1.08||1;
+    mapDraw(V.cv,[{pts:Array.from(o.sig,(v,i)=>[i,v]),color:'--out',w:2.5}],{xdom:[0,255],ydom:[0,mx],nodiag:true,vlines:[t],points:[{x:o.t,y:o.sig[o.t],color:'--ok',r:7},{x:t,y:o.sig[t],color:'--accent',r:5}],xl:'t →',yl:'σB² ↑'});
+    A.cap.textContent=mode==='uneven'?'Left side is darker than the right side':mode==='noise'?'Heavy noise added':'';
+    B.cap.textContent=`t = ${t}${t===o.t?' (Otsu’s choice)':''}`;
+    V.cap.innerHTML=`The orange curve is σB²(t). Otsu’s best is the peak, <b style="color:var(--ok)">t* = ${o.t}</b> (green dot). Your t is the pink dot.`;
+    H.cap.textContent='Each possible t cuts the histogram in two. Otsu looks for the cut that separates two groups best.';
+    const w0=o.w0[t],w1=1-w0,m0=o.m0[t],m1=o.m1[t],s=o.sig[t];
+    tbl.innerHTML=`<table class="t"><thead><tr><th>At t = ${t}</th><th class="num">Lower class (≤ t)</th><th class="num">Upper class (&gt; t)</th></tr></thead><tbody><tr><td>Fraction of pixels (ω)</td><td class="num">${w0.toFixed(3)}</td><td class="num">${w1.toFixed(3)}</td></tr><tr><td>Mean brightness (μ)</td><td class="num">${m0.toFixed(1)}</td><td class="num">${m1.toFixed(1)}</td></tr><tr><td>Spread inside the class (σ²)</td><td class="num">${o.v0[t].toFixed(1)}</td><td class="num">${o.v1[t].toFixed(1)}</td></tr></tbody></table><p class="mono" style="margin:8px 0 0">σB²(${t}) = ${w0.toFixed(3)} × ${w1.toFixed(3)} × (${m0.toFixed(1)} − ${m1.toFixed(1)})² = <b>${s.toFixed(1)}</b></p>`;
+    info.innerHTML=`Between-class variance <b>${s.toFixed(0)}</b> · within-class variance <b>${o.sw[t].toFixed(0)}</b> · they always add up to the total variance <b>${o.total.toFixed(0)}</b>, so making the classes far apart (large σB²) is the same as making each class tight (small within-class variance).`;
+    note.firstChild.innerHTML=mode==='uneven'?'<b>Where Otsu struggles:</b> one global threshold cannot suit a picture that is lit unevenly. The dark side and the bright side need different thresholds. The usual fix is an adaptive (local) threshold, or correcting the lighting first.':mode==='noise'?'<b>Noise blurs the histogram</b> so the two humps overlap. Otsu still finds a sensible cut, but pixels in the overlap are misclassified. Smooth the picture (Gaussian blur) first, then apply Otsu.':'<b>Where Otsu works well:</b> a histogram with two clear humps (bright background, darker objects). It struggles with a single hump, with very unequal class sizes, and with uneven lighting. Try the other two pictures.';
+  }
+  return {update(){cache=null;t=cur().o.t;st.set(t);render();},stop:halt};
+}
+
+/* ---------- 2 · K-means ---------- */
+function viewKM(root){
+  let k=4,feat='rgb',wp=1,seed=7,it=0,hist=null,stopA=null,elbow=null;
+  const A=imgCard('Input'),B=imgCard('K-means result');
+  const top=grid(220);
+  const PL=el('<figure class="card"><figcaption class="cl">The k colours (cluster centres)</figcaption><div class="pal" style="display:flex;flex-wrap:wrap;gap:6px"></div><p class="cc"></p></figure>');
+  top.append(A.el,B.el,PL);
+  const Ci=chartCard('Total distance to centres, per round','');const Cel=chartCard('Choosing k: total distance for k = 1 to 8','');
+  const cc=grid(260);cc.append(Ci.el,Cel.el);
+  const ctl=el(`<div class="controls">${slider('k','k (number of clusters)',2,8,4)}<span class="ctl-label">Uses</span>${seg('feat',[['rgb','Colour only'],['pos','Colour + position']],'rgb')}<button type="button" id="ns">New random start</button></div>`);
+  const ctl2=el(`<div class="controls">${slider('it','Round',0,10,0)}<button type="button" id="play" class="primary">Play the rounds</button><button type="button" id="end">Run to the end</button></div>`);
+  const ctl3=el(`<div class="controls" id="wpc" hidden>${slider('wp','Position weight',0.2,3,1,0.1)}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>K-means: group pixels by colour</h2>'),el('<p class="explain">Every pixel is a point in colour space (R, G, B). K-means drops k centres, then repeats two moves: <b>1. assign</b> each pixel to the nearest centre, <b>2. move</b> each centre to the average of its pixels. It stops when nothing changes. Step through the rounds and watch the colours settle.</p>'),ctl,ctl3,ctl2,top,info,cc,note);
+  const sk=bindSlider(root,'k',v=>{halt();k=v;run();});
+  bindSeg(root,'feat',v=>{halt();feat=v;ctl3.hidden=v!=='pos';run();});
+  bindSlider(root,'wp',v=>{halt();wp=v;run();});
+  const si=bindSlider(root,'it',v=>{halt();it=v;render();});
+  $('#ns',root).addEventListener('click',()=>{halt();seed=(seed*31+17)&0xffff;run();});
+  $('#end',root).addEventListener('click',()=>{halt();it=hist.length-1;si.set(it);render();});
+  const pb=$('#play',root);
+  function halt(){if(stopA){stopA();stopA=null;}pb.textContent='Play the rounds';}
+  pb.addEventListener('click',()=>{if(stopA){halt();return;}pb.textContent='Stop';const n=hist.length-1;stopA=animate(Math.max(1200,n*700),p=>{it=Math.round(p*n);si.set(it);render();},()=>{stopA=null;pb.textContent='Play the rounds';});});
+  function feats(){
+    const rgba=rgbaOf(),d=feat==='pos'?5:3,F=new Float64Array(SS*d);
+    for(let i=0;i<SS;i++){F[i*d]=rgba[i*4];F[i*d+1]=rgba[i*4+1];F[i*d+2]=rgba[i*4+2];if(d===5){F[i*d+3]=(i%S)*wp;F[i*d+4]=((i/S)|0)*wp;}}
+    return {F,d};
+  }
+  function run(){
+    const {F,d}=feats();hist=kmRun(F,SS,d,k,seed,10);it=hist.length-1;
+    si.el.max=hist.length-1;si.set(it);
+    elbow=[];for(let kk=1;kk<=8;kk++){const h=kmRun(F,SS,d,kk,seed,10);elbow.push(h[h.length-1].inertia);}
+    render();
+  }
+  function render(){
+    const rgba=rgbaOf(),h=hist[it],d=feat==='pos'?5:3;
+    paintC(A,rgba);
+    // mean colour of each cluster from the actual pixels, so the picture shows true averages
+    const sums=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<SS;i++){const s=sums[h.L[i]];s[0]+=rgba[i*4];s[1]+=rgba[i*4+1];s[2]+=rgba[i*4+2];s[3]++;}
+    const means=sums.map(s=>s[3]?[s[0]/s[3],s[1]/s[3],s[2]/s[3],s[3]]:[0,0,0,0]);
+    paintC(B,fillMeans(h.L,means));
+    B.cap.textContent=`Round ${it} of ${hist.length-1}`+(it===hist.length-1?' (final)':'');
+    A.cap.textContent='';
+    const pl=PL.querySelector('.pal');pl.innerHTML=means.map((m,i)=>`<div style="text-align:center"><div style="width:44px;height:44px;border-radius:6px;background:${rgbCss(m)};border:1px solid var(--line)"></div><div class="mono" style="font-size:11px">${(m[3]/SS*100).toFixed(0)}%</div></div>`).join('');
+    PL.querySelector('.cc').textContent='Each box is the average colour of one cluster, with its share of the pixels.';
+    const sc=1e6;mapDraw(Ci.cv,[{pts:hist.map((x,i)=>[i,x.inertia/sc]),color:'--out',w:2.5},{pts:hist.map((x,i)=>[i,x.inertia/sc]),color:'--out',dots:true}],{xdom:[0,Math.max(1,hist.length-1)],ydom:[0,Math.max(...hist.map(x=>x.inertia))*1.05/sc],div:Math.min(4,Math.max(1,hist.length-1)),nodiag:true,vlines:[it],xl:'round →',yl:'distance (millions) ↓'});
+    Ci.cap.textContent='It can only go down. When it stops falling, the centres have settled.';
+    mapDraw(Cel.cv,[{pts:elbow.map((v,i)=>[i+1,v/sc]),color:'--in',w:2.5},{pts:elbow.map((v,i)=>[i+1,v/sc]),color:'--in',dots:true}],{xdom:[1,8],ydom:[0,Math.max(...elbow)*1.05/sc],div:7,nodiag:true,vlines:[k],xl:'k →',yl:'distance (millions) ↓'});
+    Cel.cap.textContent='Look for the elbow: the k after which adding clusters helps little.';
+    info.innerHTML=`Total distance from pixels to their centres: <b>${fmt(Math.round(h.inertia))}</b>${feat==='pos'?' · position is part of the distance, so each cluster is also a compact patch':''}`;
+    note.firstChild.innerHTML=feat==='rgb'?'<b>Colour only means no idea of location.</b> Two separate coins of the same colour land in the same cluster, and you must choose k yourself. The result depends on the random start: press "New random start" and compare. Add position to the distance and clusters become compact patches.':'<b>Colour + position</b> makes each cluster a compact patch, so it behaves a bit more like a region. Raise the weight and the picture is cut into tiles regardless of colour (compare superpixels).';
+  }
+  return {update(){run();},stop:halt};
+}
+
+/* ---------- 3 · Mean shift ---------- */
+function viewMS(root){
+  let sp=8,sr=35,res=null,sel=null,busy=false;
+  const A=imgCard('Input (click a pixel to follow it)','pick'),B=imgCard('Mean-shift filtered'),Cc=imgCard('Segments');
+  const top=grid(210);top.append(A.el,B.el,Cc.el);
+  const ctl=el(`<div class="controls">${slider('sp','Spatial radius sp',2,20,8)}${slider('sr','Colour radius sr',5,80,35)}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const path=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Mean shift: climb to the nearest peak</h2>'),el('<p class="explain">Mean shift needs no k. For each pixel it looks at the neighbours that are <b>close in position (within sp) and close in colour (within sr)</b>, moves to their average position and colour, and repeats until it stops moving. All the pixels that climb to the same peak get the same colour, so the picture flattens into regions. Click a pixel to follow its path.</p>'),ctl,top,path,info,note);
+  const go=debounce(()=>run(),180);
+  bindSlider(root,'sp',v=>{sp=v;busy=true;info.textContent='Updating…';go();});
+  bindSlider(root,'sr',v=>{sr=v;busy=true;info.textContent='Updating…';go();});
+  A.cv.addEventListener('click',e=>{const p=cellAt(A.cv,e,S);sel=p;drawA();});
+  function drawA(){
+    paintC(A,rgbaOf());
+    if(sel){
+      const r=meanShiftPath(rgbaOf(),sel.x,sel.y,sp,sr,20),g=A.ctx;
+      g.strokeStyle='rgba(255,255,255,0.9)';g.lineWidth=1;g.beginPath();g.arc(sel.x+0.5,sel.y+0.5,sp,0,2*Math.PI);g.stroke();
+      g.strokeStyle=css('--accent');g.lineWidth=1.6;g.beginPath();r.path.forEach((p,i)=>{if(i)g.lineTo(p[0]+0.5,p[1]+0.5);else g.moveTo(p[0]+0.5,p[1]+0.5);});g.stroke();
+      g.fillStyle=css('--accent');g.beginPath();g.arc(sel.x+0.5,sel.y+0.5,2.2,0,2*Math.PI);g.fill();
+      const q=r.path[r.path.length-1];g.beginPath();g.arc(q[0]+0.5,q[1]+0.5,2.8,0,2*Math.PI);g.fill();
+      path.innerHTML=`Pixel (${sel.x}, ${sel.y}) moved <b>${r.path.length-1}</b> time${r.path.length===2?'':'s'} and ended at (${q[0]}, ${q[1]}) with colour <span class="swatch" style="background:${rgbCss(r.color)}"></span><b>${rgbCss(r.color)}</b>. The white circle is the spatial window (sp).`;
+    }else path.textContent='Click a pixel in the input to see its path.';
+  }
+  function run(){
+    const t0=performance.now();
+    res=meanShift(rgbaOf(),sp,sr,5,1);
+    const lab=msSegments(res,sr);
+    const ms=Math.round(performance.now()-t0);
+    paintC(B,res);paintC(Cc,fillMeans(lab.L,lab.means));
+    A.cap.textContent='';B.cap.textContent=`sp = ${sp}, sr = ${sr}`;Cc.cap.textContent=`${lab.n} regions`;
+    info.innerHTML=`<b>${lab.n}</b> regions found · computed in <b>${ms} ms</b>. The number of regions comes out of sp and sr, not from you.`;
+    note.firstChild.innerHTML='<b>sp</b> decides how far to look. <b>sr</b> decides how different a colour may be and still count. Raise sr and neighbouring colours merge into fewer regions; lower it and the picture keeps more detail. It is slower than k-means because every pixel runs its own search.';
+    busy=false;drawA();
+  }
+  return {update(){sel=null;run();},stop(){}};
+}
+
+/* ---------- 4 · Split and merge ---------- */
+function viewSM(root){
+  let T=40,ms=8,mt=60,r=null;
+  const A=imgCard('Step 1: split into blocks'),B=imgCard('Step 2: merge similar neighbours');
+  const top=grid(260);top.append(A.el,B.el);
+  const ctl=el(`<div class="controls">${slider('T','Split if colour range exceeds',5,120,40)}<span class="ctl-label">Smallest block</span>${seg('ms',[[2,'2'],[4,'4'],[8,'8'],[16,'16']],8)}${slider('mt','Merge if colours differ by less than',0,80,60)}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const exp=el(`<ol class="note" style="padding-left:20px;margin:0 0 14px">
+    <li><b>Split:</b> start with the whole picture as one square. If its pixels are not similar enough (the colour range is above the limit), cut it into four squares and test each one again.</li>
+    <li><b>Merge:</b> blocks that touch and have similar average colours are joined into one region.</li></ol>`);
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Split and merge: cut up, then glue back</h2>'),el('<p class="explain">Split and merge is a region-based method: it works with regions that are internally uniform, instead of with individual pixels. The split step uses a quadtree. OpenCV has no ready-made function for it, so it is written by hand (the tutorial’s version is in the code below).</p>'),exp,ctl,top,info,note);
+  const go=debounce(()=>render(),120);
+  bindSlider(root,'T',v=>{T=v;go();});bindSlider(root,'mt',v=>{mt=v;go();});bindSeg(root,'ms',v=>{ms=+v;render();});
+  function render(){
+    const rgba=rgbaOf();r=splitMerge(rgba,T,ms,mt);
+    paintC(A,rgba);
+    const g=A.ctx;g.strokeStyle='rgba(255,255,255,0.75)';g.lineWidth=0.6;g.beginPath();
+    r.leaves.forEach(l=>{g.rect(l.x+0.3,l.y+0.3,l.s-0.6,l.s-0.6);});g.stroke();
+    paintC(B,boundaries(r.L,fillMeans(r.L,r.means),[255,255,255]));
+    A.cap.textContent=`${r.leaves.length} blocks. Big blocks = uniform areas, small blocks = edges and detail.`;
+    B.cap.textContent=`${r.n} regions after merging (white lines are region borders)`;
+    info.innerHTML=`<b>${r.leaves.length}</b> blocks after splitting → <b>${r.n}</b> regions after merging`;
+    note.firstChild.innerHTML='<b>Notice</b> the blocky borders: the quadtree can only cut along square lines, so edges look stair-stepped. If the split limit is too low, noise forces tiny blocks everywhere. If the merge limit is too high, different objects fuse together. And two regions of the same colour that do not touch stay separate.';
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 5 · Watershed ---------- */
+function viewWS(root){
+  let frac=0.4,r=null,over=null;
+  const C1=imgCard('1 · Otsu mask (objects)'),C2=imgCard('2 · Sure background'),C3=imgCard('3 · Distance to the background'),C4=imgCard('4 · Sure foreground'),C5=imgCard('5 · Markers'),C6=imgCard('6 · Watershed result'),C7=imgCard('Without markers');
+  const cards=grid(170);cards.append(C1.el,C2.el,C3.el,C4.el,C5.el,C6.el,C7.el);
+  const ctl=el(`<div class="controls">${slider('fr','Sure foreground = distance above',10,95,40,1,'% of the maximum')}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const exp=el(`<ol class="note" style="padding-left:20px;margin:0 0 14px">
+    <li><b>Mask:</b> Otsu separates the objects from the background. Touching coins fuse into one blob.</li>
+    <li><b>Sure background:</b> grow the mask a little. Everything outside is definitely background.</li>
+    <li><b>Distance transform:</b> every object pixel gets its distance to the nearest background pixel. Each coin centre becomes a peak, even when the coins touch.</li>
+    <li><b>Sure foreground:</b> keep only the highest part of each peak. Touching coins now become separate islands.</li>
+    <li><b>Markers:</b> number each island (one label per coin), the background gets its own label, and the unknown ring in between stays at 0.</li>
+    <li><b>Watershed:</b> flood outwards from the markers. Water rises from every marker and a wall is built where two floods meet.</li></ol>`);
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Watershed: flood from markers</h2>'),el('<p class="explain">Picture the image as a landscape where edges are ridges. Water rises from marked spots, and where waters from different spots meet you build a wall. That wall is the boundary. The key is the marker: it tells the algorithm how many objects there are and roughly where. The six steps below are the standard OpenCV recipe for separating touching coins.</p>'),exp,ctl,cards,info,note);
+  const go=debounce(()=>render(),100);
+  bindSlider(root,'fr',v=>{frac=v/100;go();},'%');
+  function render(){
+    const rgba=rgbaOf(),gray=grayFrom(rgba);
+    r=wsPipeline(rgba,gray,frac);
+    paintMask(C1,r.om.mask,[255,255,255]);
+    const sbg=new Uint8Array(SS);for(let i=0;i<SS;i++)sbg[i]=r.bg[i]?0:1;
+    paintMask(C2,sbg,[80,150,255]);
+    let mx=r.mx||1;paintG(C3,normImgD(r.dist,mx));
+    paintMask(C4,r.fg,[255,160,60]);
+    paintRGBA(C5,i=>{const m=r.markers[i];return m===0?[14,18,26]:m===1?[60,90,160]:pal(m-2);});
+    paintC(C6,boundaries(r.ws,rgba,[255,40,60]));
+    // over-segmentation: markers at every local minimum of the gradient
+    const gm=gradMag(sepBlur(gray,1)),mk=new Int32Array(SS);let nm=0;
+    const minMask=new Uint8Array(SS);
+    for(let y=1;y<S-1;y++)for(let x=1;x<S-1;x++){const p=y*S+x;let ok=true;for(let j=-1;j<=1&&ok;j++)for(let i=-1;i<=1;i++){if((i||j)&&gm[p+j*S+i]<gm[p]){ok=false;break;}}if(ok)minMask[p]=1;}
+    const cc=ccLabel(minMask,true);for(let i=0;i<SS;i++)if(cc.L[i])mk[i]=cc.L[i];nm=cc.n;
+    const wo=wsRun(rgba,mk);
+    paintC(C7,boundaries(wo,rgba,[255,40,60]));
+    C1.cap.textContent=`Otsu threshold ${r.om.t}, objects are ${r.om.dark?'darker':'brighter'}`;C3.cap.textContent='Brighter = further from the background';C4.cap.textContent=`${r.count} separate islands`;
+    C5.cap.textContent='One colour per coin; blue = background';C6.cap.textContent=`${r.count} coins found; red lines are the walls`;C7.cap.textContent=`${nm} regions: one per tiny dip in the image`;
+    const isC=App.name==='Coins';info.innerHTML=`Markers found: <b>${r.count}</b> object${r.count===1?'':'s'}.${isC?` The picture has 11 coins. ${r.count<11?'Some coins are still joined or lost: try a different percentage.':r.count>11?'More markers than coins: a coin has been cut in two, raise the percentage.':'One marker per coin: the touching coins are split.'}`:' Count the objects in the picture and adjust the percentage until each has exactly one marker.'}`;
+    note.firstChild.innerHTML='<b>Without markers (last picture)</b> watershed floods from every tiny dip in the picture and shatters it into hundreds of pieces or more: this is over-segmentation. The markers are what make watershed useful. <b>Choosing the distance cut-off</b> is the trade-off: too low and touching coins stay joined, too high and small coins vanish.';
+  }
+  return {update:render,stop(){}};
+}
+function normImgD(f,hi){const o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)o[i]=Math.round(Math.min(255,f[i]/hi*255));return o;}
+function sepBlur(g,sigma){
+  const r=Math.ceil(3*sigma),w=[];let s=0;for(let i=-r;i<=r;i++){const v=Math.exp(-i*i/(2*sigma*sigma));w.push(v);s+=v;}
+  const t=new Float32Array(SS),o=new Float32Array(SS);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){let a=0;for(let k=-r;k<=r;k++)a+=w[k+r]/s*g[y*S+Math.max(0,Math.min(S-1,x+k))];t[y*S+x]=a;}
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){let a=0;for(let k=-r;k<=r;k++)a+=w[k+r]/s*t[Math.max(0,Math.min(S-1,y+k))*S+x];o[y*S+x]=a;}
+  return o;
+}
+function paintG(card,a){grayCard(card,a);}
+function paintMask(card,m,col){
+  const d=card.img.data,c=col||[255,255,255];
+  for(let i=0;i<SS;i++){const q=i*4,on=m[i];d[q]=on?c[0]:14;d[q+1]=on?c[1]:18;d[q+2]=on?c[2]:26;d[q+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+
+/* ---------- 6 · Compare ---------- */
+function viewCmp(root){
+  let k=5,sr=35,T=40,frac=0.4;
+  const A=imgCard('Input'),K=imgCard('K-means'),M=imgCard('Mean shift'),Sm=imgCard('Split and merge'),W=imgCard('Watershed');
+  const cards=grid(170);cards.append(A.el,K.el,M.el,Sm.el,W.el);
+  const ctl=el(`<div class="controls">${slider('k','K-means k',2,8,5)}${slider('sr','Mean shift colour radius',10,70,35)}${slider('T','Split limit',10,100,40)}${slider('fr','Watershed foreground',20,90,40,1,'%')}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const tb=el(`<div class="scroll"><table class="t"><thead><tr><th></th><th>K-means</th><th>Mean shift</th><th>Split and merge</th><th>Watershed</th></tr></thead><tbody>
+    <tr><td><b>Idea</b></td><td>Group pixels by colour around k centres</td><td>Climb each pixel to the nearest density peak</td><td>Quadtree split, then merge similar neighbours</td><td>Flood from markers; walls where floods meet</td></tr>
+    <tr><td><b>You must give</b></td><td>k, the number of clusters</td><td>Two radii (position and colour)</td><td>Split limit, merge limit, smallest block</td><td>Markers (from Otsu + distance transform)</td></tr>
+    <tr><td><b>Uses position?</b></td><td>No (unless you add it)</td><td>Yes</td><td>Yes (neighbouring blocks)</td><td>Yes</td></tr>
+    <tr><td><b>Regions connected?</b></td><td>Not necessarily: same colour = same label anywhere</td><td>Mostly</td><td>Yes</td><td>Yes, one per marker</td></tr>
+    <tr><td><b>Touching objects of the same colour</b></td><td>Cannot split them</td><td>Cannot split them</td><td>Cannot split them</td><td><b>Can</b>, using the distance transform</td></tr>
+    <tr><td><b>Speed</b></td><td>Fast</td><td>Slow</td><td>Fast</td><td>Fast</td></tr>
+    <tr><td><b>Weak spot</b></td><td>Needs k; random start</td><td>Slow; two parameters to tune</td><td>Blocky borders</td><td>Over-segments without good markers</td></tr>
+    <tr><td><b>Best for</b></td><td>Colour quantisation, simple scenes, a quick first look</td><td>Smoothing a picture into flat regions before further analysis</td><td>Large, uniform regions; teaching the region idea</td><td>Counting and separating touching round objects</td></tr>
+  </tbody></table></div>`);
+  const qs=el(`<div class="controls" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div><span class="ctl-label">Do you know how many groups there are?</span> ${seg('q1',[['yes','Yes'],['no','No']],'yes')}</div>
+    <div><span class="ctl-label">Do objects touch or overlap and must be counted separately?</span> ${seg('q2',[['yes','Yes'],['no','No']],'no')}</div>
+    <div><span class="ctl-label">Do you need a quick answer on a big image?</span> ${seg('q3',[['yes','Yes'],['no','No']],'no')}</div></div>`);
+  const rec=el('<div class="callout" aria-live="polite"><p></p></div>');
+  const code=codeBlock(()=>`import cv2
+import numpy as np
+
+img  = cv2.imread("coins.png")                       # BGR colour image
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# Otsu: returns the best threshold and the binary image
+t, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+# i. K-means on the colours
+Z = img.reshape(-1, 3).astype(np.float32)
+crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+_, labels, centres = cv2.kmeans(Z, 5, None, crit, 5, cv2.KMEANS_PP_CENTERS)
+kmeans_img = centres.astype(np.uint8)[labels.flatten()].reshape(img.shape)
+
+# ii. Mean shift (sp = spatial radius, sr = colour radius)
+meanshift_img = cv2.pyrMeanShiftFiltering(img, sp=10, sr=30, maxLevel=0)
+
+# iii. Split and merge (no OpenCV function: a recursive quadtree)
+def split(img, x, y, s, limit, min_size, blocks):
+    block = img[y:y+s, x:x+s].reshape(-1, 3)
+    if s > min_size and (block.max(0) - block.min(0)).max() > limit:
+        h = s // 2
+        for dx, dy in [(0, 0), (h, 0), (0, h), (h, h)]:
+            split(img, x + dx, y + dy, h, limit, min_size, blocks)
+    else:
+        blocks.append((x, y, s, block.mean(0)))
+blocks = []
+split(img, 0, 0, 128, 40, 8, blocks)       # then merge touching blocks of similar colour
+
+# iv. Watershed with markers
+kernel  = np.ones((3, 3), np.uint8)
+opening = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+sure_bg = cv2.dilate(opening, kernel, iterations=3)
+dist    = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+_, sure_fg = cv2.threshold(dist, 0.5 * dist.max(), 255, 0)
+sure_fg = sure_fg.astype(np.uint8)
+unknown = cv2.subtract(sure_bg, sure_fg)
+n, markers = cv2.connectedComponents(sure_fg)
+markers = markers + 1                          # background becomes 1
+markers[unknown == 255] = 0                    # unknown ring = 0
+markers = cv2.watershed(img, markers)          # walls are marked -1
+img[markers == -1] = (0, 0, 255)`);
+  root.append(el('<h2>Compare the four methods</h2>'),el('<p class="explain">The same picture through all four. Notice where each one succeeds and where it fails, especially for the coins that touch.</p>'),ctl,cards,info,el('<h3>Side by side</h3>'),tb,el('<h3>Which one should I use?</h3>'),qs,rec,el('<h3>In OpenCV</h3>'),code.el);
+  const go=debounce(()=>render(),150);
+  bindSlider(root,'k',v=>{k=v;go();});bindSlider(root,'sr',v=>{sr=v;go();});bindSlider(root,'T',v=>{T=v;go();});bindSlider(root,'fr',v=>{frac=v/100;go();},'%');
+  const q={a:'yes',b:'no',c:'no'};
+  bindSeg(root,'q1',v=>{q.a=v;recommend();});bindSeg(root,'q2',v=>{q.b=v;recommend();});bindSeg(root,'q3',v=>{q.c=v;recommend();});
+  function recommend(){
+    let s;
+    if(q.b==='yes')s='<b>Watershed</b> with markers from the distance transform. It is the only one of the four that can separate touching objects of the same colour.';
+    else if(q.a==='yes'&&q.c==='yes')s='<b>K-means</b>. Fast, and you already know k.';
+    else if(q.a==='yes')s='<b>K-means</b> if colour alone separates the groups. Add position if you want compact patches.';
+    else if(q.c==='yes')s='<b>Split and merge</b> or <b>K-means with a guessed k</b> (use the elbow). Mean shift is slow on big images.';
+    else s='<b>Mean shift</b>. It finds the number of regions itself, and flattens the picture into clean regions.';
+    rec.firstChild.innerHTML=s;
+  }
+  function render(){
+    const rgba=rgbaOf(),gray=grayFrom(rgba);
+    paintC(A,rgba);
+    const F=new Float64Array(SS*3);for(let i=0;i<SS;i++){F[i*3]=rgba[i*4];F[i*3+1]=rgba[i*4+1];F[i*3+2]=rgba[i*4+2];}
+    let t0=performance.now();const h=kmRun(F,SS,3,k,7,10),hl=h[h.length-1];
+    const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<SS;i++){const s=sums[hl.L[i]];s[0]+=rgba[i*4];s[1]+=rgba[i*4+1];s[2]+=rgba[i*4+2];s[3]++;}
+    paintC(K,fillMeans(hl.L,sums.map(s=>s[3]?[s[0]/s[3],s[1]/s[3],s[2]/s[3]]:[0,0,0])));const tk=Math.round(performance.now()-t0);
+    t0=performance.now();const ms=meanShift(rgba,8,sr,5,1),lab=msSegments(ms,sr);paintC(M,fillMeans(lab.L,lab.means));const tm=Math.round(performance.now()-t0);
+    t0=performance.now();const sm=splitMerge(rgba,T,8,60);paintC(Sm,boundaries(sm.L,fillMeans(sm.L,sm.means),[255,255,255]));const ts=Math.round(performance.now()-t0);
+    t0=performance.now();const ws=wsPipeline(rgba,gray,frac);paintC(W,boundaries(ws.ws,rgba,[255,40,60]));const tw=Math.round(performance.now()-t0);
+    K.cap.textContent=`${k} clusters · ${tk} ms`;M.cap.textContent=`${lab.n} regions · ${tm} ms`;Sm.cap.textContent=`${sm.n} regions · ${ts} ms`;W.cap.textContent=`${ws.count} coins · ${tw} ms`;
+    info.innerHTML=`Timings are for this page in your browser and are only a rough guide. Mean shift is clearly the slowest.`;
+    recommend();
+  }
+  return {update(){render();code.refresh();},stop(){}};
+}
+
+/* ---------- 7 · Contours ---------- */
+function viewCont(root){
+  let src='otsu',nb8=true,sel=0,tab='img';
+  const A=imgCard('Components (click one)','pick');
+  const top=grid(260);top.append(A.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Components from</span>${seg('src',[['otsu','Otsu mask'],['ws','Watershed result']],'otsu')}<span class="ctl-label">A pixel is on the boundary if a neighbour in the</span>${seg('nb',[['8','8-neighbourhood'],['4','4-neighbourhood']],'8')}</div>`);
+  const tw=el('<div class="scroll"></div>');
+  const info=el('<div class="callout" aria-live="polite"><p></p></div>');
+  root.append(el('<h2>Contours: area, perimeter and compactness</h2>'),el('<p class="explain">Take the binary mask and label each blob (connected component). For each one, <b>area</b> = number of pixels, <b>perimeter</b> = number of boundary pixels, and <b>compactness</b> = perimeter² ÷ (4π × area). A perfect circle scores 1, and the more stretched or ragged the shape, the larger the number. Click a blob in the picture, or a row in the table.</p>'),ctl,top,tw,info);
+  bindSeg(root,'src',v=>{src=v;sel=0;render();});bindSeg(root,'nb',v=>{nb8=v==='8';render();});
+  let cur=null;
+  A.cv.addEventListener('click',e=>{const p=cellAt(A.cv,e,S);const l=cur&&cur.L[p.y*S+p.x];if(l>0){sel=l;draw();table();}});
+  function render(){
+    const rgba=rgbaOf(),gray=grayFrom(rgba);let L,n;
+    if(src==='otsu'){const om=otsuMask(gray),cc=ccLabel(om.mask,true);L=cc.L;n=cc.n;}
+    else{const p=wsPipeline(rgba,gray,0.5),Lw=new Int32Array(SS);let m=0;for(let i=0;i<SS;i++)if(p.ws[i]>1){Lw[i]=p.ws[i]-1;if(p.ws[i]-1>m)m=p.ws[i]-1;}L=Lw;n=m;}
+    cur={L,n,st:compStats(L,n,nb8),rgba};
+    if(sel>n)sel=0;draw();table();
+  }
+  function draw(){
+    const {L,n,rgba}=cur,d=A.img.data;
+    for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+      const p=y*S+x,l=L[p],q=p*4;
+      if(!l){d[q]=14;d[q+1]=18;d[q+2]=26;d[q+3]=255;continue;}
+      let edge=false;for(let j=-1;j<=1&&!edge;j++)for(let i=-1;i<=1;i++){if(!i&&!j)continue;if(!nb8&&i&&j)continue;const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=S||yy>=S||L[yy*S+xx]!==l){edge=true;break;}}
+      const c=pal(l-1),on=sel===0||sel===l;
+      if(edge){d[q]=255;d[q+1]=255;d[q+2]=255;}else{const f=on?0.55:0.22;d[q]=c[0]*f;d[q+1]=c[1]*f;d[q+2]=c[2]*f;}
+      d[q+3]=255;
+    }
+    A.ctx.putImageData(A.img,0,0);
+    A.cap.textContent=`${n} component${n===1?'':'s'}. White pixels are the boundary pixels that get counted as perimeter.`;
+  }
+  function table(){
+    const {n,st}=cur;
+    let h='<table class="t"><thead><tr><th>#</th><th class="num">Area (pixels)</th><th class="num">Perimeter (boundary pixels)</th><th class="num">Compactness</th><th class="num">Centre (x, y)</th></tr></thead><tbody>';
+    for(let l=1;l<=n;l++){const s=st[l];h+=`<tr data-l="${l}" style="cursor:pointer;${sel===l?'background:color-mix(in srgb,var(--accent) 14%,var(--surface))':''}"><td><span class="swatch" style="background:${rgbCss(pal(l-1))}"></span>${l}</td><td class="num">${s.area}</td><td class="num">${s.per}</td><td class="num">${s.compact.toFixed(2)}</td><td class="num">${s.cx.toFixed(0)}, ${s.cy.toFixed(0)}</td></tr>`;}
+    tw.innerHTML=h+'</tbody></table>';
+    tw.querySelectorAll('tr[data-l]').forEach(r=>r.addEventListener('click',()=>{sel=+r.dataset.l===sel?0:+r.dataset.l;draw();table();}));
+    const merged=st.slice(1).filter(s=>s.area>700);
+    info.firstChild.innerHTML=src==='otsu'?(merged.length?`<b>Look at the biggest rows.</b> Several of these blobs have a very large area and a compactness well above 1: they are touching coins that the mask fused into one component, so you counted two or three coins as one. Switch to the watershed result to split them.`:'Each blob is one coin.'):`<b>After watershed</b> every coin is its own component, and the compactness values drop close to 1 because round coins are nearly circular.`;
+  }
+  return {update(){sel=0;render();},stop(){}};
+}
+
+/* ---------- 8 · Shape playground (compactness) ---------- */
+function viewShape(root){
+  const G=20;
+  let grid_=new Uint8Array(G*G),nb8=true,drag=null;
+  const cv=el(`<canvas width="400" height="400" role="img" aria-label="A 20 by 20 grid you can draw on" style="width:100%;max-width:400px;aspect-ratio:1;cursor:crosshair;touch-action:none;border:1px solid var(--line);border-radius:8px"></canvas>`);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Shape</span>${seg('sh',[['sq','Square'],['disk','Disk'],['rect','Thin rectangle'],['plus','Plus'],['star','Star'],['clear','Clear']],'disk')}<span class="ctl-label">Boundary test</span>${seg('nb',[['8','8-neighbourhood'],['4','4-neighbourhood']],'8')}</div>`);
+  const tw=el('<div class="scroll"></div>');
+  const note=el('<div class="callout"><p>Click and drag on the grid to draw or erase cells. A <b>disk</b> has the smallest perimeter for its area, so its compactness is the lowest (close to 1). A thin rectangle has the same kind of area but a long edge, so its compactness is large. Compactness tells you how round a shape is, and it does not depend on size.</p><p style="margin-top:8px"><b>Which definition?</b> Some books use circularity = 4π × area ÷ perimeter², which is the inverse (1 for a circle, smaller for other shapes). Use whichever your lecture does, but be consistent.</p></div>');
+  const row=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))"></div>');
+  const left=el('<div class="card" style="gap:8px"></div>');left.append(cv);row.append(left);const right=el('<div class="card" style="gap:8px"></div>');right.append(tw);row.append(right);
+  root.append(el('<h2>Draw a shape and measure it</h2>'),el('<p class="explain">Compactness is easier to feel than to read. Draw shapes on the grid and watch area, perimeter and compactness change.</p>'),ctl,row,note);
+  function preset(n){
+    const g=new Uint8Array(G*G);
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      const dx=x-9.5,dy=y-9.5;let on=0;
+      if(n==='sq')on=Math.abs(dx)<5.5&&Math.abs(dy)<5.5;
+      else if(n==='disk')on=dx*dx+dy*dy<=7.2*7.2;
+      else if(n==='rect')on=Math.abs(dx)<8.5&&Math.abs(dy)<1.6;
+      else if(n==='plus')on=(Math.abs(dx)<2.2&&Math.abs(dy)<8.2)||(Math.abs(dy)<2.2&&Math.abs(dx)<8.2);
+      else if(n==='star'){const a=Math.atan2(dy,dx),r=Math.hypot(dx,dy);on=r<=5.5+3.4*Math.abs(Math.cos(2.5*a));}
+      g[y*G+x]=on?1:0;
+    }
+    return g;
+  }
+  bindSeg(root,'sh',v=>{grid_=preset(v);render();});bindSeg(root,'nb',v=>{nb8=v==='8';render();});
+  function cell(e){const r=cv.getBoundingClientRect();const x=Math.max(0,Math.min(G-1,Math.floor((e.clientX-r.left)/r.width*G))),y=Math.max(0,Math.min(G-1,Math.floor((e.clientY-r.top)/r.height*G)));return y*G+x;}
+  cv.addEventListener('pointerdown',e=>{try{cv.setPointerCapture(e.pointerId);}catch(x){}const c=cell(e);drag=grid_[c]?0:1;grid_[c]=drag;render();});
+  cv.addEventListener('pointermove',e=>{if(drag===null)return;const c=cell(e);if(grid_[c]!==drag){grid_[c]=drag;render();}});
+  cv.addEventListener('pointerup',()=>{drag=null;});cv.addEventListener('pointercancel',()=>{drag=null;});
+  function stats(){
+    const L=new Int32Array(G*G),st=[];let n=0;const stack=[];
+    for(let s=0;s<G*G;s++){if(!grid_[s]||L[s])continue;n++;L[s]=n;stack.length=0;stack.push(s);while(stack.length){const p=stack.pop(),x=p%G,y=(p/G)|0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){if(!i&&!j)continue;const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=G||yy>=G)continue;const q=yy*G+xx;if(grid_[q]&&!L[q]){L[q]=n;stack.push(q);}}}}
+    const out=Array.from({length:n+1},()=>({a:0,p:0}));const edge=new Uint8Array(G*G);
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){const l=L[y*G+x];if(!l)continue;out[l].a++;let e=false;for(let j=-1;j<=1&&!e;j++)for(let i=-1;i<=1;i++){if(!i&&!j)continue;if(!nb8&&i&&j)continue;const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=G||yy>=G||L[yy*G+xx]!==l){e=true;break;}}if(e){out[l].p++;edge[y*G+x]=1;}}
+    return {L,n,out,edge};
+  }
+  function render(){
+    const g=cv.getContext('2d'),W=cv.width,c=W/G,s=stats();
+    g.clearRect(0,0,W,W);g.fillStyle=css('--surface');g.fillRect(0,0,W,W);
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      if(grid_[y*G+x]){g.fillStyle=s.edge[y*G+x]?css('--out'):css('--in');g.fillRect(x*c,y*c,c,c);}
+    }
+    g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();for(let i=0;i<=G;i++){g.moveTo(i*c,0);g.lineTo(i*c,W);g.moveTo(0,i*c);g.lineTo(W,i*c);}g.stroke();
+    let h='<table class="t"><thead><tr><th>Blob</th><th class="num">Area</th><th class="num">Perimeter</th><th class="num">Compactness</th></tr></thead><tbody>';
+    for(let l=1;l<=s.n;l++){const a=s.out[l].a,p=s.out[l].p;h+=`<tr><td>${l}</td><td class="num">${a}</td><td class="num">${p}</td><td class="num">${(p*p/(4*Math.PI*a)).toFixed(2)}</td></tr>`;}
+    tw.innerHTML=(s.n?h+'</tbody></table>':'<p class="note">Draw something on the grid.</p>')+'<p class="note" style="margin:8px 0 0">Orange cells are the boundary pixels that are counted. Compactness = perimeter² ÷ (4π × area).</p>';
+  }
+  grid_=preset('disk');
+  return {update:render,stop(){drag=null;}};
+}
+
+initApp([{short:"Otsu",build:viewOtsu},{short:"K-means",build:viewKM},{short:"Mean shift",build:viewMS},{short:"Split and merge",build:viewSM},{short:"Watershed",build:viewWS},{short:"Compare",build:viewCmp},{short:"Contours",build:viewCont},{short:"Shape playground",build:viewShape}],'coins');
+</script>

@@ -1,0 +1,850 @@
+<title>Contrast Stretching Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, step tabs, then a stage of cards. Blue always means the input or original, orange the output or result, rose outline the thing you are pointing at. */
+:root{
+  --bg:#F3F4F7;--surface:#FFFFFF;--ink:#111827;--muted:#566074;--line:#CFD5E0;
+  --accent:#C2185B;--in:#2A58C8;--out:#C4510C;--ok:#1E8A4C;--bad:#C62828;--tone:var(--ink);
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+    --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+  --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.25;margin:22px 0 6px}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--ink)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"],button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 11%,var(--surface));border-color:var(--ink);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px;image-rendering:pixelated}
+.card canvas.pick{cursor:crosshair}
+.card canvas.chart{aspect-ratio:1;background:var(--surface);image-rendering:auto}
+.card canvas.wide{aspect-ratio:512/170;background:var(--surface);image-rendering:auto}
+.card canvas.rulers{aspect-ratio:720/250;background:var(--surface);image-rendering:auto}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.controls[hidden]{display:none}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--ink)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b,.mono{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:72ch}
+.formula{font-family:var(--font-mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;overflow-x:auto;white-space:nowrap}
+.callout{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:8px;padding:12px 14px;margin:0 0 16px;max-width:72ch}
+.callout p{margin:0}
+.callout .mono{font-size:14px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+table.t tr[hidden]{display:none}
+table.t tr.cur td{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.q p{margin:0}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);align-self:flex-start}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ans input[type=text],table.sum input{height:36px;font:inherit;font-family:var(--font-mono);font-size:14px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.ans input[type=text]{width:130px}
+.fb{font-size:14px;min-height:20px}
+.fb.ok,.okc{color:var(--ok)}
+.fb.bad,.badc{color:var(--bad)}
+.sol{border-left:3px solid var(--line);padding:2px 0 2px 12px;font-size:14px;color:var(--muted)}
+.sol p{margin:2px 0}
+.sol[hidden]{display:none}
+.opts{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opts button{text-align:left}
+.opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.score{font-family:var(--font-mono);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 14px;padding:0;list-style:none}
+.facts li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts li b{display:block;font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+.facts li span{color:var(--muted)}
+.code{position:relative;margin:0 0 14px}
+.code pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.55}
+.code button{position:absolute;top:8px;right:8px;min-height:30px;padding:3px 10px;font-size:12px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Machine vision · point operations</p>
+    <h1>Contrast stretching lab</h1>
+    <p class="lede">See what stretching does, handle any output range, practise, and learn where it fails.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-v="shapes" aria-pressed="false">Shapes</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">Stored as 128 × 128 gray pixels. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const S=128,SS=S*S;
+function clamp8(v){return v<0?0:v>255?255:v;}
+function histo(a){const h=new Uint32Array(256);for(let i=0;i<a.length;i++)h[a[i]]++;return h;}
+function minMax(a){let mn=255,mx=0;for(let i=0;i<a.length;i++){if(a[i]<mn)mn=a[i];if(a[i]>mx)mx=a[i];}return [mn,mx];}
+function cumul(h){const c=new Float64Array(h.length);let s=0;for(let i=0;i<h.length;i++){s+=h[i];c[i]=s;}return c;}
+function stretchRaw(v,imin,imax,omin,omax){return (v-imin)/(imax-imin)*(omax-omin)+omin;}
+function stretch8(v,imin,imax){return clamp8(Math.round(stretchRaw(v,imin,imax,0,255)));}
+function pctLimits(h,n,p){
+  const c=cumul(h);let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(c[v]>p*n){lo=v;break;}}
+  for(let v=255;v>=0;v--){const above=n-(v>0?c[v-1]:0);if(above>p*n){hi=v;break;}}
+  return [lo,hi];
+}
+function peakLimits(h,f){
+  let mx=0;for(let i=0;i<256;i++)if(h[i]>mx)mx=h[i];
+  const thr=f*mx;let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(h[v]>thr){lo=v;break;}}
+  for(let v=255;v>=0;v--){if(h[v]>thr){hi=v;break;}}
+  return [lo,hi,thr];
+}
+function eqLUT(h,n,mode){
+  const L=h.length,lut=new Array(L);let s=0;
+  for(let k=0;k<L;k++){s+=h[k];const x=(L-1)*s/n;lut[k]=mode==='floor'?Math.floor(x+1e-9):Math.round(x);}
+  return lut;
+}
+function eqLUTcv(h,n){
+  const lut=new Array(256).fill(0);let i=0;
+  while(i<256&&h[i]===0)i++;
+  if(i===256)return lut;
+  if(h[i]===n)return lut.fill(i);
+  const scale=255/(n-h[i]);let sum=0;lut[i]=0;i++;
+  for(;i<256;i++){sum+=h[i];lut[i]=Math.round(sum*scale);}
+  return lut;
+}
+function applyLUT(a,lut){const o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++)o[i]=lut[a[i]];return o;}
+function gammaV(v,g){return Math.round(255*Math.pow(v/255,g));}
+function linV(v,k,b){return clamp8(Math.round((v-128)*k+128+b));}
+function sCurveV(v,k){const x=v/255-0.5;return clamp8(Math.round(255*(Math.tanh(k*x)/(2*Math.tanh(k/2))+0.5)));}
+function meanStd(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];const m=s/a.length;let q=0;for(let i=0;i<a.length;i++){const d=a[i]-m;q+=d*d;}return [m,Math.sqrt(q/a.length)];}
+function levelsUsed(h){let c=0;for(let i=0;i<h.length;i++)if(h[i])c++;return c;}
+function lcg(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function makeDull(base,c,shift){
+  const lo=(255-255*c)/2,o=new Uint8ClampedArray(base.length);
+  for(let i=0;i<base.length;i++)o[i]=clamp8(Math.round(lo+base[i]*c+shift));
+  return o;
+}
+function addOutliers(a){
+  const o=Uint8ClampedArray.from(a);
+  for(let k=0;k<16;k++){const i=(k*2711+97)%a.length;o[i]=k%2?0:255;}
+  return o;
+}
+//CORE-END
+
+const BIG=720;
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function fmt(n){return n.toLocaleString('en-US');}
+function num(x,d){const k=Math.pow(10,d==null?3:d);const r=Math.round(x*k)/k;return String(Object.is(r,-0)?0:r);}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${String(o[0])===String(cur)}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+  return g;
+}
+function slider(id,label,min,max,val,step,suffix){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}${suffix||''}</output></label>`;
+}
+function bindSlider(root,id,cb,suffix){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=num(v,2)+(suffix||'');};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(+s.value);},get:()=>+s.value,el:s};
+}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function cellAt(cv,e,n){
+  const r=cv.getBoundingClientRect();
+  let x=Math.floor((e.clientX-r.left)/r.width*n),y=Math.floor((e.clientY-r.top)/r.height*n);
+  x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));
+  return {x,y};
+}
+function imgCard(label,extra,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" class="${extra||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(S,S),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function grayCard(card,arr){
+  const d=card.img.data;
+  for(let i=0;i<SS;i++){const o=i*4;d[o]=d[o+1]=d[o+2]=arr[i];d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function histCard(label,cap,w,h){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${w||512}" height="${h||170}" class="wide" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function chartCard(label,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="300" height="300" class="chart" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function histDraw(cv,h,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=16,pt=8;
+  const cMain=css(o.color||'--in'),cLine=css('--line'),cMut=css('--muted'),cAcc=css('--accent');
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  let mx=o.max||1;if(!o.max){for(let i=0;i<h.length;i++)if(h[i]>mx)mx=h[i];}
+  const bw=W/h.length,ph=H-pb-pt;
+  for(let i=0;i<h.length;i++){
+    const hh=h[i]/mx*ph;
+    g.fillStyle=(o.shade!=null&&i>o.shade)?cLine:cMain;
+    g.fillRect(i*bw,H-pb-hh,bw+0.5,hh);
+  }
+  g.fillStyle=cMut;g.fillRect(0,H-pb,W,1);
+  g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  [0,64,128,192,255].forEach(v=>{const x=(v+0.5)*W/256;g.fillRect(x,H-pb,1,4);g.textAlign=v===0?'left':v===255?'right':'center';g.fillText(String(v),v===0?1:v===255?W-1:x,H-3);});
+  if(o.cdf){
+    const c=cumul(h),tot=c[c.length-1]||1;g.strokeStyle=css('--ok');g.lineWidth=2;g.beginPath();
+    for(let i=0;i<h.length;i++){const x=(i+0.5)*bw,y=H-pb-c[i]/tot*ph;if(i===0)g.moveTo(x,y);else g.lineTo(x,y);}
+    g.stroke();
+  }
+  if(o.hline!=null){
+    const y=H-pb-o.hline/mx*ph;g.strokeStyle=cAcc;g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.setLineDash([]);
+  }
+  (o.markers||[]).forEach(m=>{
+    const x=(m.x+0.5)*bw;g.strokeStyle=m.color||cAcc;g.lineWidth=2;g.beginPath();g.moveTo(x,pt-4);g.lineTo(x,H-pb);g.stroke();
+    if(m.label){g.fillStyle=m.color||cAcc;g.textAlign=m.x>200?'right':'left';g.fillText(m.label,x+(m.x>200?-4:4),pt+6);}
+  });
+}
+function mapDraw(cv,series,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pl=30,pr=10,pt=10,pb=26;
+  const xd=o.xdom||[0,255],yd=o.ydom||[0,255];
+  const fx=x=>pl+(x-xd[0])/(xd[1]-xd[0])*(W-pl-pr),fy=y=>H-pb-(y-yd[0])/(yd[1]-yd[0])*(H-pb-pt);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  const D=o.div||4,ks=Array.from({length:D+1},(_,i)=>i);
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();
+  ks.forEach(k=>{const x=pl+k*(W-pl-pr)/D,y=pt+k*(H-pt-pb)/D;g.moveTo(x,pt);g.lineTo(x,H-pb);g.moveTo(pl,y);g.lineTo(W-pr,y);});
+  g.stroke();
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  g.textAlign='center';ks.forEach(k=>{const v=xd[0]+k*(xd[1]-xd[0])/D;g.fillText(num(v,xd[1]-xd[0]>=20?0:2),pl+k*(W-pl-pr)/D,H-12);});
+  g.textAlign='right';ks.forEach(k=>{const v=yd[0]+k*(yd[1]-yd[0])/D;g.fillText(num(v,yd[1]-yd[0]>=20?0:2),pl-4,H-pb-k*(H-pt-pb)/D+4);});
+  g.textAlign='right';g.fillText(o.xl||'input →',W-pr,H-1);g.textAlign='left';g.fillText(o.yl||'output ↑',pl+4,pt+9);
+  if(!o.nodiag&&xd[0]===yd[0]&&xd[1]===yd[1]){
+    g.setLineDash([4,4]);g.strokeStyle=css('--muted');g.lineWidth=1;g.beginPath();g.moveTo(fx(xd[0]),fy(yd[0]));g.lineTo(fx(xd[1]),fy(yd[1]));g.stroke();g.setLineDash([]);
+  }
+  series.forEach(s=>{
+    const pts=s.pts||Array.from(s.lut,(y,x)=>[x,y]);
+    g.strokeStyle=s.color?css(s.color):css('--ink');g.lineWidth=s.w||2.5;
+    g.setLineDash(s.dash||[]);g.beginPath();
+    if(!s.dots){pts.forEach((p,i)=>{const x=fx(p[0]),y=fy(p[1]);if(i===0)g.moveTo(x,y);else g.lineTo(x,y);});g.stroke();}
+    g.setLineDash([]);
+    if(s.dots){g.fillStyle=s.color?css(s.color):css('--ink');pts.forEach(p=>{g.beginPath();g.arc(fx(p[0]),fy(p[1]),4,0,2*Math.PI);g.fill();});}
+  });
+  (o.vlines||[]).forEach(x=>{g.strokeStyle=css('--accent');g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(fx(x),pt);g.lineTo(fx(x),H-pb);g.stroke();g.setLineDash([]);});
+  (o.points||[]).forEach(p=>{
+    g.fillStyle=css(p.color||'--accent');g.beginPath();g.arc(fx(p.x),fy(p.y),p.r||6,0,2*Math.PI);g.fill();
+    g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+  });
+}
+function codeBlock(getText){
+  const w=el('<div class="code"><pre></pre><button type="button">Copy</button></div>');
+  const pre=w.querySelector('pre'),btn=w.querySelector('button');
+  function refresh(){pre.textContent=getText();}
+  btn.addEventListener('click',async()=>{
+    const t=pre.textContent;let done=false;
+    try{await navigator.clipboard.writeText(t);done=true;btn.textContent='Copied';}catch(e){}
+    if(!done){
+      try{const r=document.createRange();r.selectNodeContents(pre);const s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';}catch(e){btn.textContent='Select text';}
+    }
+    setTimeout(()=>{btn.textContent='Copy';},1600);
+  });
+  refresh();
+  return {el:w,refresh};
+}
+function statsLine(a){
+  const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);
+  return `mean <b>${m.toFixed(0)}</b> · spread (std) <b>${sd.toFixed(0)}</b> · range <b>${mn}</b> to <b>${mx}</b>`;
+}
+
+/* ---------- images ---------- */
+let LAST_RGBA=null;
+function noisyGray(rgba,seed,amp){
+  const g=new Uint8ClampedArray(SS),r=lcg(seed);
+  for(let i=0;i<SS;i++){
+    const v=0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]+(r()+r()-1)*amp;
+    g[i]=Math.round(v<0?0:v>255?255:v);
+  }
+  return g;
+}
+function sceneLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  g.scale(0.5,0.5);
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,256,256);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,256,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,256,1);
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,11,6);
+}
+function sceneShapes(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,S);bg.addColorStop(0,'#141a22');bg.addColorStop(1,'#2a3340');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  g.fillStyle='#8c97a8';g.fillRect(14,70,40,40);g.fillRect(76,18,36,30);g.fillRect(70,84,44,30);
+  g.fillStyle='#ebe6d4';
+  [[34,34,16],[98,70,11],[40,92,9],[104,104,8]].forEach(a=>{g.beginPath();g.arc(a[0],a[1],a[2],0,2*Math.PI);g.fill();});
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,23,8);
+}
+function sceneCoins(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,S,S);bg.addColorStop(0,'#f4f1ea');bg.addColorStop(1,'#e4dfd3');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  const coin=(x,y,r,a,b)=>{
+    const rg=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);rg.addColorStop(0,a);rg.addColorStop(1,b);
+    g.fillStyle=rg;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1.2;g.beginPath();g.arc(x,y,r*0.72,0,2*Math.PI);g.stroke();
+  };
+  const GOLD=['#c99a24','#85620c'],COP=['#b8714a','#7a3f20'],SIL=['#a2adb8','#5f6a76'];
+  [[24,26,15,GOLD],[51,24,13,SIL],[92,28,14,COP],[113,34,10,GOLD],[30,66,12,COP],[60,70,16,GOLD],[94,72,12,SIL],[22,104,11,SIL],[52,102,13,GOLD],[84,104,15,COP],[107,99,9,SIL]].forEach(k=>coin(k[0],k[1],k[2],k[3][0],k[3][1]));
+  const id=g.getImageData(0,0,S,S).data,r=lcg(31),o=new Uint8ClampedArray(SS*4),gr=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const n=(r()+r()-1)*6;
+    for(let k=0;k<3;k++)o[i*4+k]=Math.round(Math.max(0,Math.min(255,id[i*4+k]+n)));
+    o[i*4+3]=255;
+    gr[i]=Math.round(0.299*o[i*4]+0.587*o[i*4+1]+0.114*o[i*4+2]);
+  }
+  LAST_RGBA=o;
+  return gr;
+}
+
+/* ---------- app frame ---------- */
+const App={base:null,name:'Landscape',views:[],panels:[],cur:0,steps:[]};
+function setBase(gray,name,rgba){App.base=gray;App.name=name;if(rgba)App.rgba=rgba;const v=App.views[App.cur];if(v)v.update();}
+const SCENES={landscape:['Landscape',()=>sceneLandscape()],shapes:['Shapes',()=>sceneShapes()],coins:['Coins',()=>sceneCoins()]};
+function initApp(steps,start){
+  App.steps=steps;start=start||'landscape';
+  const stage=$('#stage'),nav=$('#steps');
+  steps.forEach((s,i)=>{
+    const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+    b.addEventListener('click',()=>go(i));
+    nav.appendChild(b);
+    const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);App.panels.push(p);App.views.push(null);
+  });
+  function go(i){
+    const old=App.views[App.cur];if(old&&old.stop)old.stop();
+    App.cur=i;
+    App.panels.forEach((p,j)=>{p.hidden=j!==i;});
+    nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+    if(!App.views[i])App.views[i]=steps[i].build(App.panels[i]);
+    App.views[i].update();
+    $('#back').hidden=i===0;
+    $('#next').textContent=i===steps.length-1?'Start again':'Next';
+  }
+  $('#back').addEventListener('click',()=>go(Math.max(0,App.cur-1)));
+  $('#next').addEventListener('click',()=>go(App.cur===steps.length-1?0:App.cur+1));
+  const srcBtns=[...document.querySelectorAll('#src button')];
+  const setSource=v=>srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  const msg=$('#srcmsg'),DEF='Stored as 128 × 128 gray pixels. Everything runs in your browser.';
+  $('#src').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    const v=b.dataset.v;
+    if(SCENES[v]){setSource(v);msg.textContent=DEF;const gr=SCENES[v][1]();setBase(gr,SCENES[v][0],LAST_RGBA);}
+    else{$('#file').click();}
+  });
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+        const s=Math.min(im.width,im.height);
+        g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        const d=g.getImageData(0,0,S,S).data,gr=new Uint8ClampedArray(SS);
+        for(let i=0;i<SS;i++)gr[i]=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+        setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 128 × 128.';
+        setBase(gr,f.name,Uint8ClampedArray.from(d));
+      };
+      im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+      im.src=r.result;
+    };
+    r.onerror=()=>{msg.textContent='That file could not be read.';};
+    r.readAsDataURL(f);
+    e.target.value='';
+  });
+  if(window.matchMedia){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const rr=()=>{const v=App.views[App.cur];if(v)v.update();};
+    if(mq.addEventListener)mq.addEventListener('change',rr);
+  }
+  App.base=SCENES[start][1]();App.rgba=LAST_RGBA;
+  go(0);
+  App.go=go;
+}
+
+function maxOf(h){let m=1;for(let i=0;i<h.length;i++)if(h[i]>m)m=h[i];return m;}
+const pick=(r,a)=>a[Math.floor(r()*a.length)];
+
+/* ---------- 1 · See it ---------- */
+function viewSee(root){
+  let c=0.4,shift=0,t=1,stopA=null,hv=null,curSrc=null,curLut=null,curMM=[0,255];
+  const A=imgCard('Input image','pick'),B=imgCard('Output image');
+  const M=chartCard('The rule: input → output','');
+  const HA=histCard('Input histogram',''),HB=histCard('Output histogram','');
+  const cards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))"></div>');cards.append(A.el,B.el,M.el);
+  const hcards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))"></div>');hcards.append(HA.el,HB.el);
+  const ctl=el(`<div class="controls">${slider('sq','Make it dull: keep this share of the range',10,100,40,1,'%')}${slider('sh','Brightness shift',-60,60,0)}</div>`);
+  const ctl2=el(`<div class="controls">${slider('tt','Stretch amount',0,100,100,1,'%')}<button type="button" id="play" class="primary">Play the stretch</button></div>`);
+  const formula=el('<div class="formula" aria-live="polite"></div>');
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const ex=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<p class="note"></p>');
+  root.append(el('<h2>What contrast stretching does</h2>'),el('<p class="explain">A dull image uses only a narrow band of gray values, so every pixel looks about the same. Contrast stretching finds the darkest and brightest value in the image and spreads everything in between across the full 0 to 255 range. Make the picture duller with the first slider, then press play and watch the histogram slide apart.</p>'),ctl,ctl2,formula,cards,info,ex,hcards,note);
+  const pb=$('#play',root);
+  bindSlider(root,'sq',v=>{halt();c=v/100;render();},'%');
+  bindSlider(root,'sh',v=>{halt();shift=v;render();});
+  const st=bindSlider(root,'tt',v=>{halt();t=v/100;render();},'%');
+  function halt(){if(stopA){stopA();stopA=null;}pb.textContent='Play the stretch';}
+  pb.addEventListener('click',()=>{
+    if(stopA){halt();return;}
+    pb.textContent='Stop';
+    stopA=animate(3600,p=>{const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;t=e;st.set(Math.round(e*100));render();},()=>{stopA=null;pb.textContent='Play the stretch';});
+  });
+  function drawChart(){
+    const pts=[{x:curMM[0],y:curLut[curMM[0]],color:'--accent'},{x:curMM[1],y:curLut[curMM[1]],color:'--accent'}];
+    if(hv!=null)pts.push({x:hv,y:curLut[hv],color:'--out',r:5});
+    mapDraw(M.cv,[{lut:curLut,color:'--ink',w:3}],{vlines:curMM,points:pts});
+  }
+  function render(){
+    const src=makeDull(App.base,c,shift);curSrc=src;
+    const [mn,mx]=minMax(src);curMM=[mn,mx];
+    const lut=new Array(256);
+    for(let v=0;v<256;v++){const full=mx>mn?stretch8(v,mn,mx):v;lut[v]=clamp8(Math.round(v+t*(full-v)));}
+    curLut=lut;
+    const out=applyLUT(src,lut),hi=histo(src),ho=histo(out),[omn,omx]=minMax(out);
+    const m=Math.max(maxOf(hi),maxOf(ho));
+    grayCard(A,src);grayCard(B,out);
+    A.cap.textContent=`Values use ${mn} to ${mx}`;B.cap.textContent=`Values use ${omn} to ${omx}`;
+    M.cap.textContent='The ink line is the rule. It passes through (Imin, 0) and (Imax, 255) when fully stretched. The dashed line means no change.';
+    histDraw(HA.cv,hi,{color:'--in',max:m,markers:[{x:mn,label:'Imin '+mn},{x:mx,label:'Imax '+mx}]});
+    histDraw(HB.cv,ho,{color:'--out',max:m});
+    HA.cap.textContent='Taller bar = more pixels with that gray value.';HB.cap.textContent='Same scale as the input histogram.';
+    formula.textContent=`O = (I − ${mn}) ÷ (${mx} − ${mn}) × 255` + (t<1?`     (showing ${Math.round(t*100)}% of the stretch)`:'');
+    info.innerHTML=`Input spans <b>${mn}</b> to <b>${mx}</b> and uses <b>${levelsUsed(hi)}</b> different gray levels. Output spans <b>${omn}</b> to <b>${omx}</b> and uses <b>${levelsUsed(ho)}</b>.`;
+    note.textContent='The output histogram is the same shape, just stretched wider. Stretching moves the gray levels apart but cannot create new ones, so gaps appear between the bars and the number of levels in use stays the same.';
+    drawChart();
+    exText();
+  }
+  function exText(){
+    if(hv==null){ex.innerHTML='Point at the input picture to see the rule applied to one pixel.';return;}
+    const [mn,mx]=curMM;
+    ex.innerHTML=mx>mn?`I = <b>${hv}</b> → (${hv} − ${mn}) ÷ (${mx} − ${mn}) × 255 = <b>${num(stretchRaw(hv,mn,mx,0,255),1)}</b> → <b>${stretch8(hv,mn,mx)}</b> at full stretch`:'The image is flat (one gray value), so there is nothing to stretch.';
+  }
+  A.cv.addEventListener('pointermove',e=>{const p=cellAt(A.cv,e,S);hv=curSrc[p.y*S+p.x];drawChart();exText();});
+  A.cv.addEventListener('pointerleave',()=>{hv=null;drawChart();exText();});
+  return {update:render,stop:halt};
+}
+
+/* ---------- 2 and 3 · Prove it, any range ---------- */
+function proofCore(root,general){
+  const P=general?'g':'s';
+  const NR=general?5:4;
+  const st={imin:60,imax:180,I:120,omin:0,omax:255,shown:NR,preset:'255'};
+  let tm=null;
+  const rc=el('<figure class="card"><figcaption class="cl">Same fraction of the way</figcaption><canvas width="720" height="250" class="rulers" role="img" aria-label="Two number lines. The pixel value I sits the same fraction of the way along the input range as the new value O sits along the output range."></canvas><p class="cc frac"></p></figure>');
+  const cv=rc.querySelector('canvas'),frac=rc.querySelector('.frac');
+  const ctl=el(`<div class="controls">${slider(P+'-imin',general?'I min':'min',0,250,60)}${slider(P+'-imax',general?'I max':'max',1,255,180)}${slider(P+'-I','Pixel value I',60,180,120)}</div>`);
+  const outCtl=general?el(`<div class="controls"><span class="ctl-label">Output range</span>${seg('out',[['255','0 to 255'],['unit','0 to 1'],['sym','−1 to 1'],['rev','255 to 0'],['mid','50 to 200'],['custom','Custom']],'255')}</div>`):null;
+  const cust=general?el(`<div class="controls" hidden>${slider(P+'-omin','O min',0,255,0)}${slider(P+'-omax','O max',0,255,255)}</div>`):null;
+  const formula=el('<div class="formula" aria-live="polite"></div>');
+  const formula2=el('<div class="formula" aria-live="polite"></div>');
+  const checks=el('<p class="readout" aria-live="polite"></p>');
+  const tableWrap=el('<div class="scroll"></div>');
+  const tctl=el('<div class="controls"><button type="button" class="primary" data-a="next">Next step</button><button type="button" data-a="play">Play the proof</button><button type="button" data-a="all">Show all</button><button type="button" data-a="reset">Reset</button></div>');
+  const L2=chartCard('Another way: a straight line through two points','');
+  const vanish=el('<ul class="facts"></ul>');
+  let D1,D2,dnote;
+  if(general){
+    D1=imgCard('Input picture');D2=imgCard('Output picture');
+  }
+  const recall=general?el(`<div class="callout"><p><b>You do not need to memorise the formula.</b> Remember one idea: the pixel sits the <b>same fraction of the way</b> along the input range as the answer sits along the output range.</p><p class="mono" style="margin-top:8px">(I − Imin) ÷ (Imax − Imin) = (O − Omin) ÷ (Omax − Omin)</p><p style="margin-top:8px">Write that down, put your numbers in, and solve for O. That is the whole formula.</p></div>`):
+    el(`<div class="callout"><p><b>The idea:</b> the darkest pixel (<b>min</b>) must become <b>0</b> and the brightest (<b>max</b>) must become <b>255</b>. Every other pixel keeps its place in between, so it sits the same fraction of the way along both ranges.</p>
+    <p style="margin-top:10px"><b>Step 1 · write the proportion</b></p><p class="mono">O ÷ 255 = (I − min) ÷ (max − min)</p>
+    <p style="margin-top:10px"><b>Step 2 · multiply both sides by 255</b></p><p class="mono">O = (I − min) ÷ (max − min) × 255</p>
+    <p style="margin-top:10px">That is the formula. Nothing to memorise: write the proportion, then solve for O.</p></div>`);
+  root.append(el(general?'<h2>When the range is not 0 to 255</h2>':'<h2>Prove it without memorising it</h2>'),
+    el(general?'<p class="explain">The same idea works for any output range. Maybe you need values between 0 and 1 for a neural network, or between 50 and 200 to leave headroom, or even a reversed range that flips the image. Choose an output range and watch the number lines and the formula change.</p>':'<p class="explain">Move the sliders and watch the pixel I on the top line. The answer O sits the same fraction of the way along the bottom line, which runs from 0 to 255. Then try the numbers below by hand.</p>'),
+    recall);
+  if(general){root.append(outCtl,cust);}
+  root.append(ctl,rc,formula,formula2,checks,el(general?'<h3>Derive it in four small moves</h3>':'<h3>Or build it in three small moves</h3>'),el(general?'<p class="explain" style="margin-bottom:10px">Each move is simple, and each keeps the two ends and your pixel in proportion. After the last move the ends land exactly on the output range.</p>':'<p class="explain" style="margin-bottom:10px">Each move keeps the pixel in proportion. After the last move the min end is 0 and the max end is 255.</p>'),tctl,tableWrap);
+  if(general){root.append(vanish);}
+  if(general)root.append(el('<h3>Another way: the straight line</h3>'),el('<p class="explain" style="margin-bottom:10px">Stretching is a straight line through two points: (Imin, Omin) and (Imax, Omax). Any straight line is y = start + slope × (x − x₀), which gives the same formula.</p>'));
+  const lc=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))"></div>');lc.append(L2.el);
+  if(general){lc.append(D1.el,D2.el);}
+  if(general)root.append(lc);
+  dnote=el('<p class="note"></p>');if(general)root.append(dnote);
+  const smin=bindSlider(root,P+'-imin',v=>{st.imin=Math.min(v,st.imax-1);fix();render();});
+  const smax=bindSlider(root,P+'-imax',v=>{st.imax=Math.max(v,st.imin+1);fix();render();});
+  const sI=bindSlider(root,P+'-I',v=>{st.I=v;render();});
+  let somin,somax;
+  if(general){
+    somin=bindSlider(root,P+'-omin',v=>{st.omin=v;render();});
+    somax=bindSlider(root,P+'-omax',v=>{st.omax=v;render();});
+    bindSeg(root,'out',v=>{
+      st.preset=v;
+      const m={'255':[0,255],unit:[0,1],sym:[-1,1],rev:[255,0],mid:[50,200]};
+      if(m[v]){st.omin=m[v][0];st.omax=m[v][1];}
+      cust.hidden=v!=='custom';
+      if(v==='custom'){somin.set(st.omin>=0&&st.omin<=255?Math.round(st.omin):0);somax.set(st.omax>=0&&st.omax<=255?Math.round(st.omax):255);st.omin=somin.get();st.omax=somax.get();}
+      render();
+    });
+  }
+  function fix(){
+    smin.el.max=st.imax-1;smax.el.min=st.imin+1;
+    smin.set(st.imin);smax.set(st.imax);
+    sI.el.min=st.imin;sI.el.max=st.imax;
+    st.I=Math.max(st.imin,Math.min(st.imax,st.I));sI.set(st.I);
+  }
+  function outDom(){
+    const lo=Math.min(st.omin,st.omax),hi=Math.max(st.omin,st.omax);
+    if(lo>=0&&hi<=255&&hi>1)return [0,255];
+    return [Math.min(lo,0),Math.max(hi,1)];
+  }
+  function drawRulers(T,O){
+    const g=cv.getContext('2d'),W=cv.width,H=cv.height,X0=46,X1=W-46,yi=74,yo=176;
+    const d=outDom(),xi=v=>X0+v/255*(X1-X0),xo=v=>X0+(v-d[0])/(d[1]-d[0])*(X1-X0);
+    const cIn=css('--in'),cOut=css('--out'),cAcc=css('--accent'),cMut=css('--muted'),cInk=css('--ink');
+    g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+    g.font='12px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+    g.fillStyle=cMut;g.textAlign='left';g.fillText('INPUT VALUES',X0,18);g.fillText('OUTPUT VALUES',X0,128);
+    g.strokeStyle=cMut;g.lineWidth=1.5;
+    [[yi,0,255,xi],[yo,d[0],d[1],xo]].forEach(a=>{
+      g.beginPath();g.moveTo(X0,a[0]);g.lineTo(X1,a[0]);g.stroke();
+      g.fillStyle=cMut;g.textAlign='center';g.fillText(num(a[1],2),X0,a[0]+34);g.fillText(num(a[2],2),X1,a[0]+34);
+      g.beginPath();g.moveTo(X0,a[0]-5);g.lineTo(X0,a[0]+5);g.moveTo(X1,a[0]-5);g.lineTo(X1,a[0]+5);g.stroke();
+    });
+    g.fillStyle=cIn;g.globalAlpha=0.28;g.fillRect(xi(st.imin),yi-9,xi(st.imax)-xi(st.imin),18);g.globalAlpha=1;
+    g.strokeStyle=cIn;g.lineWidth=2;g.strokeRect(xi(st.imin),yi-9,xi(st.imax)-xi(st.imin),18);
+    const ox0=xo(Math.min(st.omin,st.omax)),ox1=xo(Math.max(st.omin,st.omax));
+    g.fillStyle=cOut;g.globalAlpha=0.28;g.fillRect(ox0,yo-9,ox1-ox0,18);g.globalAlpha=1;
+    g.strokeStyle=cOut;g.lineWidth=2;g.strokeRect(ox0,yo-9,ox1-ox0,18);
+    g.fillStyle=cIn;g.textAlign='center';g.fillText((general?'Imin ':'min ')+st.imin,xi(st.imin),yi-16);g.fillText((general?'Imax ':'max ')+st.imax,xi(st.imax),yi-16);
+    g.fillStyle=cOut;g.fillText((general?'Omin ':'')+num(st.omin,2),xo(st.omin),yo+24);g.fillText((general?'Omax ':'')+num(st.omax,2),xo(st.omax),yo+24);
+    g.setLineDash([5,4]);g.strokeStyle=cMut;g.lineWidth=1.2;
+    g.beginPath();g.moveTo(xi(st.imin),yi+9);g.lineTo(xo(st.omin),yo-9);g.moveTo(xi(st.imax),yi+9);g.lineTo(xo(st.omax),yo-9);g.stroke();g.setLineDash([]);
+    g.strokeStyle=cAcc;g.lineWidth=2.5;g.beginPath();g.moveTo(xi(st.I),yi);g.lineTo(xo(O),yo);g.stroke();
+    g.fillStyle=cIn;g.beginPath();g.arc(xi(st.I),yi,8,0,2*Math.PI);g.fill();g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+    g.fillStyle=cOut;g.beginPath();g.arc(xo(O),yo,8,0,2*Math.PI);g.fill();g.stroke();
+    g.fillStyle=cInk;g.textAlign='center';g.fillText('I = '+st.I,xi(st.I),yi+34>yi+30?yi+30:yi+30);
+    g.fillText('O = '+num(O,2),xo(O),yo-18);
+  }
+  function renderTable(T,O){
+    const A=st.imin,B=st.imax,I=st.I,Wd=st.omax-st.omin;
+    const rows=general?[
+      ['Start','Pixel values as they are',[A,I,B]],
+      ['A · subtract Imin',`Subtract ${A}. The range now starts at 0.`,[0,I-A,B-A]],
+      ['B · divide by (Imax − Imin)',`Divide by ${B-A}. The range is now 0 to 1 and your pixel is the fraction t.`,[0,T,1]],
+      ['C · multiply by (Omax − Omin)',`Multiply by ${num(Wd,3)}. The range now has the width of the output range.`,[0,T*Wd,Wd]],
+      ['D · add Omin',`Add ${num(st.omin,3)}. The range now sits where the output range sits.`,[st.omin,O,st.omax]]
+    ]:[
+      ['Start','Pixel values as they are',[A,I,B]],
+      ['1 · subtract min',`Subtract ${A}. The darkest pixel is now 0.`,[0,I-A,B-A]],
+      ['2 · divide by (max − min)',`Divide by ${B-A}. The range is now 0 to 1 and your pixel is the fraction.`,[0,T,1]],
+      ['3 · multiply by 255',`Multiply by 255. The range is now 0 to 255.`,[0,T*255,255]]
+    ];
+    let h='<table class="t"><thead><tr><th>Move</th><th>What we do</th><th class="num">'+(general?'Imin':'min')+' end</th><th class="num">Your pixel</th><th class="num">'+(general?'Imax':'max')+' end</th></tr></thead><tbody>';
+    rows.forEach((r,i)=>{
+      h+=`<tr ${i>=st.shown?'hidden':''} class="${i===st.shown-1?'cur':''}"><td>${r[0]}</td><td>${r[1]}</td><td class="num">${num(r[2][0],3)}</td><td class="num">${num(r[2][1],3)}</td><td class="num">${num(r[2][2],3)}</td></tr>`;
+    });
+    h+='</tbody></table>';
+    tableWrap.innerHTML=h;
+    tctl.querySelector('[data-a="next"]').textContent=st.shown>=NR?'All moves shown':'Next move';
+  }
+  function render(){
+    const A=st.imin,B=st.imax,I=st.I,Wd=st.omax-st.omin,T=(I-A)/(B-A),O=st.omin+T*Wd;
+    drawRulers(T,O);
+    frac.innerHTML=!general?`Fraction of the way along the input range: (${I} − ${A}) ÷ (${B} − ${A}) = <b>${num(T,3)}</b>. Fraction of the way along 0 to 255: ${num(O,3)} ÷ 255 = <b>${num(T,3)}</b>. They match.`:`Fraction of the way along the input range: (${I} − ${A}) ÷ (${B} − ${A}) = <b>${num(T,3)}</b>. Fraction along the output range: (${num(O,3)} − ${num(st.omin,2)}) ÷ ${num(Wd,2)||'0'} = <b>${Wd?num(T,3):'—'}</b>. They match.`;
+    if(general){
+      formula.textContent='O = (I − Imin) ÷ (Imax − Imin) × (Omax − Omin) + Omin';
+      formula2.textContent=`O = (${I} − ${A}) ÷ (${B} − ${A}) × (${num(st.omax,2)} − ${num(st.omin,2)}) + ${num(st.omin,2)} = ${num(O,3)}`;
+    }else{
+      formula.textContent='O = (I − min) ÷ (max − min) × 255';
+      formula2.innerHTML=`<b>Proportion:</b> O ÷ 255 = (${I} − ${A}) ÷ (${B} − ${A}) = ${num(T,3)}<br><b>So:</b> O = ${num(T,3)} × 255 = ${num(O,3)}   → stored as ${Math.round(O)}`;
+    }
+    const ok=(a,b)=>Math.abs(a-b)<1e-9?'✓':'✗';
+    checks.innerHTML=`Quick checks: ${general?'Imin':'min'} → ${general?'Omin':'0'} <b>${ok(stretchRaw(A,A,B,st.omin,st.omax),st.omin)}</b> · ${general?'Imax':'max'} → ${general?'Omax':'255'} <b>${ok(stretchRaw(B,A,B,st.omin,st.omax),st.omax)}</b> · halfway → halfway <b>${ok(stretchRaw((A+B)/2,A,B,st.omin,st.omax),(st.omin+st.omax)/2)}</b>`;
+    renderTable(T,O);
+    const d=outDom();
+    const y=x=>st.omin+(x-A)/(B-A)*Wd;
+    mapDraw(L2.cv,[
+      {pts:[[0,y(0)],[A,st.omin]],color:'--muted',dash:[4,4],w:1.5},
+      {pts:[[B,st.omax],[255,y(255)]],color:'--muted',dash:[4,4],w:1.5},
+      {pts:[[A,st.omin],[B,st.omax]],color:'--ink',w:3}
+    ],{ydom:d,nodiag:true,points:[{x:A,y:st.omin,color:'--in'},{x:B,y:st.omax,color:'--in'},{x:I,y:O,color:'--out',r:7}],yl:'O ↑'});
+    const m=Wd/(B-A);
+    L2.cap.innerHTML=`Slope m = (Omax − Omin) ÷ (Imax − Imin) = ${num(Wd,2)} ÷ ${B-A} = <b>${num(m,4)}</b>. Then O = Omin + m × (I − Imin) = ${num(st.omin,2)} + ${num(m,4)} × ${I-A} = <b>${num(O,3)}</b>.`;
+    if(general){
+      const items=[];
+      items.push(['If Imin = 0',A===0?'The "− Imin" part vanishes. Here it has.':'The "− Imin" part disappears. Here Imin is '+A+', so it stays.']);
+      items.push(['If Omin = 0',st.omin===0?'The "+ Omin" part vanishes. Here it has.':'The "+ Omin" part disappears. Here Omin is '+num(st.omin,2)+', so it stays.']);
+      items.push(['If Omax − Omin = 255',Wd===255?'The multiplier is 255, the 8-bit special case. Here it is.':'The multiplier is 255 only for a 0 to 255 output. Here it is '+num(Wd,2)+'.']);
+      items.push(['If Omax < Omin',Wd<0?'The line slopes down, so bright becomes dark: a negative image. Here it does.':'The line slopes up. Swap the two ends of the output range and you get a negative.']);
+      vanish.innerHTML=items.map(i=>`<li><b>${i[0]}</b><span>${i[1]}</span></li>`).join('');
+      const base=App.base,src=new Uint8ClampedArray(SS),out=new Uint8ClampedArray(SS);
+      const rawR=(()=>{const lo=Math.min(st.omin,st.omax),hi=Math.max(st.omin,st.omax);return lo>=0&&hi<=255&&hi>1;})();
+      for(let i=0;i<SS;i++){
+        src[i]=Math.round(A+base[i]/255*(B-A));
+        const o=stretchRaw(src[i],A,B,st.omin,st.omax);
+        out[i]=rawR?clamp8(Math.round(o)):Math.round((o-Math.min(st.omin,st.omax))/(Math.abs(Wd)||1)*255);
+      }
+      grayCard(D1,src);grayCard(D2,out);
+      D1.cap.textContent=`Your picture squeezed into ${A} to ${B}`;
+      D2.cap.textContent=rawR?`Drawn with the values as they are (${num(Math.min(st.omin,st.omax),2)} to ${num(Math.max(st.omin,st.omax),2)})`:`Drawn with ${num(st.omin,2)} to ${num(st.omax,2)} scaled to black through white`;
+      dnote.textContent=Wd<0?'A reversed output range gives the negative of the stretched picture.':rawR&&Math.abs(Wd)<255?'This output range is narrower than 0 to 255, so the picture is stretched, but not all the way to black and white.':'';
+    }
+  }
+  function halt(){if(tm){clearInterval(tm);tm=null;}tctl.querySelector('[data-a="play"]').textContent='Play the proof';}
+  tctl.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;const a=b.dataset.a;
+    if(a==='next'){halt();if(st.shown<NR)st.shown++;render();}
+    else if(a==='all'){halt();st.shown=NR;render();}
+    else if(a==='reset'){halt();st.shown=1;render();}
+    else if(a==='play'){
+      if(tm){halt();return;}
+      st.shown=1;render();b.textContent='Stop';
+      tm=setInterval(()=>{if(st.shown>=NR){halt();return;}st.shown++;render();},1500);
+    }
+  });
+  return {update(){fix();render();},stop:halt};
+}
+function viewProve(root){return proofCore(root,false);}
+function viewGeneral(root){return proofCore(root,true);}
+
+/* ---------- 4 · Practice ---------- */
+function viewPractice(root){
+  const r=lcg((Date.now()&0xffffff)+7);
+  const defs=[
+    {tag:'Forward · 0 to 255',make(){const mn=pick(r,[20,30,40,50,60,70]),k=pick(r,[1,2,3,4]),mx=mn+100,I=mn+20*k,o=51*k;
+      return {text:`An image has a minimum gray value of <b>${mn}</b> and a maximum of <b>${mx}</b>. It is min-max stretched to the range 0 to 255. What is the new value of a pixel whose original value is <b>${I}</b>?`,ans:o,tol:0.5,
+      sol:['Write the proportion: (O − 0) ÷ (255 − 0) = (I − Imin) ÷ (Imax − Imin).',`(${I} − ${mn}) ÷ (${mx} − ${mn}) = ${20*k} ÷ 100 = ${num(0.2*k,2)}.`,`O = 255 × ${num(0.2*k,2)} = <b>${o}</b>.`]};}},
+    {tag:'Backward · 0 to 255',make(){const mn=pick(r,[20,30,40,50,60,70]),k=pick(r,[1,2,3,4]),mx=mn+100,o=51*k,I=mn+20*k;
+      return {text:`An image with minimum <b>${mn}</b> and maximum <b>${mx}</b> was min-max stretched to 0 to 255. In the result, one pixel has the value <b>${o}</b>. What was its original value?`,ans:I,tol:0.5,
+      sol:['Use the same proportion, but solve for I this time.',`O ÷ 255 = ${o} ÷ 255 = ${num(0.2*k,2)}, so the pixel is ${num(0.2*k,2)} of the way along the input range.`,`I = ${mn} + ${num(0.2*k,2)} × (${mx} − ${mn}) = ${mn} + ${20*k} = <b>${I}</b>.`]};}},
+    {tag:'Find the limits first · 0 to 255',make(){const a=pick(r,[20,30,40,50,60]),b=a+100,k=pick(r,[1,2,3,4]),I=a+20*k;
+      return {text:`After a min-max stretch to 0 to 255, a pixel with original value <b>${a}</b> became <b>0</b> and a pixel with original value <b>${b}</b> became <b>255</b>. What does a pixel with original value <b>${I}</b> become?`,ans:51*k,tol:0.5,
+      sol:[`A pixel that became 0 was the darkest, so Imin = ${a}. A pixel that became 255 was the brightest, so Imax = ${b}.`,`(${I} − ${a}) ÷ (${b} − ${a}) = ${20*k} ÷ 100 = ${num(0.2*k,2)}.`,`O = 255 × ${num(0.2*k,2)} = <b>${51*k}</b>.`]};}},
+    {tag:'General range · not 0 to 255',make(){const a=pick(r,[30,40,50,60,70,80]),o1=pick(r,[10,20,30,40]),d=pick(r,[10,20,30,40]),I=a+d;
+      return {text:`The values in an image run from <b>${a}</b> to <b>${a+50}</b>. You stretch them onto the output range <b>${o1}</b> to <b>${o1+200}</b>. What is the new value of a pixel whose original value is <b>${I}</b>?`,ans:o1+4*d,tol:0.5,
+      sol:['Same-fraction proportion: (O − Omin) ÷ (Omax − Omin) = (I − Imin) ÷ (Imax − Imin).',`(${I} − ${a}) ÷ 50 = ${d} ÷ 50 = ${num(d/50,2)}.`,`O = ${o1} + ${num(d/50,2)} × (${o1+200} − ${o1}) = ${o1} + ${num(d/50,2)} × 200 = <b>${o1+4*d}</b>.`]};}},
+    {tag:'General range · 0 to 1',make(){const mn=pick(r,[20,40,60]),mx=mn+200,d=pick(r,[50,100,150]),I=mn+d;
+      return {text:`A float image has minimum <b>${mn}</b> and maximum <b>${mx}</b>. You normalise it to the range <b>0 to 1</b>. What is the new value of a pixel whose original value is <b>${I}</b>?`,ans:d/200,tol:0.005,
+      sol:['Now the output range is 0 to 1, so Omax − Omin = 1 and Omin = 0.',`O = (${I} − ${mn}) ÷ (${mx} − ${mn}) × 1 + 0 = ${d} ÷ 200 = <b>${num(d/200,3)}</b>.`]};}},
+    {tag:'Reversed range',make(){const a=pick(r,[20,40,60]),b=a+100,k=pick(r,[1,2,3,4]),I=a+20*k;
+      return {text:`The range <b>${a}</b> to <b>${b}</b> is mapped onto <b>255 to 0</b>, which means ${a} goes to 255 and ${b} goes to 0. What is the new value of a pixel whose original value is <b>${I}</b>?`,ans:255-51*k,tol:0.5,
+      sol:[`Fraction of the way: (${I} − ${a}) ÷ (${b} − ${a}) = ${num(0.2*k,2)}.`,`O = Omin + fraction × (Omax − Omin), with Omin = 255 and Omax = 0.`,`O = 255 + ${num(0.2*k,2)} × (0 − 255) = 255 − ${51*k} = <b>${255-51*k}</b>. Reversing the range gives a negative.`]};}},
+    {tag:'Think · when it does nothing',mcq:true,text:'An image already has a minimum of 0 and a maximum of 255, but 99% of its pixels lie between 100 and 130. What does min-max stretching to 0 to 255 do?',
+      options:['It improves the contrast a lot, because 0 and 255 are the extremes.','Nothing. The mapping is the identity because Imin = 0 and Imax = 255.','It makes the image darker.','It fails with a division by zero.'],correct:1,
+      sol:['With Imin = 0 and Imax = 255 the formula becomes (I − 0) ÷ (255 − 0) × 255 = I. Every pixel keeps its value.','The fix is to choose the limits with percentiles, or to use histogram equalization.']},
+    {tag:'Think · the histogram',mcq:true,text:'What does a min-max stretch do to the shape of the histogram?',
+      options:['It makes it perfectly flat.','It keeps the same shape but spreads it wider, with gaps between the used levels.','It shifts it left without changing its width.','It mirrors it left to right.'],correct:1,
+      sol:['The mapping is a straight line, so the shape is only scaled sideways. Levels move apart, which leaves empty gaps, and no new gray levels are created.','Making the histogram flat is what histogram equalization tries to do.']},
+    {tag:'Outliers · percentile limits',make(){const L=pick(r,[60,80,100,120]),H=L+50,d=pick(r,[10,20,30]),I=L+d;
+      return {text:`An image has one hot pixel at 255 and one dead pixel at 0, so min-max would do almost nothing. Instead you use percentile limits: the low limit is <b>${L}</b> and the high limit is <b>${H}</b>. Pixels outside the limits are clipped to 0 or 255. After stretching to 0 to 255, what does a pixel with original value <b>${I}</b> become?`,ans:Math.round(5.1*d),tol:0.5,
+      sol:[`Use the percentile limits as Imin and Imax: Imin = ${L}, Imax = ${H}.`,`(${I} − ${L}) ÷ (${H} − ${L}) = ${d} ÷ 50 = ${num(d/50,2)}.`,`O = 255 × ${num(d/50,2)} = ${num(255*d/50,2)} → <b>${Math.round(5.1*d)}</b>. A pixel above ${H} would become 255 and one below ${L} would become 0.`]};}}
+  ];
+  const solved=new Set();
+  const score=el('<p class="score" aria-live="polite"></p>');
+  function upd(){score.textContent=`Correct so far: ${solved.size} of ${defs.length}`;}
+  root.append(el('<h2>Practice questions</h2>'),el('<p class="explain">Nine questions from different angles: finding a new value, working backwards, finding the limits yourself, using other output ranges, thinking about what the method can and cannot do, and handling outliers. Type an answer and press Check. The numbers change when you press New numbers, so you can practise as many times as you like.</p>'),score);
+  defs.forEach((def,idx)=>{
+    const w=el('<div class="q"></div>');
+    const tag=el(`<span class="tag">${idx+1} · ${def.tag}</span>`);
+    const text=el('<p></p>');
+    const ans=el('<div class="ans"></div>');
+    const fb=el('<div class="fb" aria-live="polite"></div>');
+    const sol=el('<div class="sol" hidden></div>');
+    let data=null,input=null,opts=[];
+    function build(){
+      data=def.mcq?def:def.make();
+      text.innerHTML=data.text;fb.textContent='';fb.className='fb';sol.hidden=true;
+      sol.innerHTML=data.sol.map(s=>`<p>${s}</p>`).join('');
+      ans.innerHTML='';
+      if(def.mcq){
+        const o=el('<div class="opts"></div>');opts=[];
+        data.options.forEach((t,i)=>{
+          const b=el(`<button type="button">${t}</button>`);
+          b.addEventListener('click',()=>{
+            opts.forEach(x=>{x.classList.remove('right','wrong');});
+            if(i===data.correct){b.classList.add('right');fb.textContent='Correct.';fb.className='fb ok';solved.add(idx);upd();sol.hidden=false;}
+            else{b.classList.add('wrong');fb.textContent='Not quite. Try another option, or show the solution.';fb.className='fb bad';}
+          });
+          o.appendChild(b);opts.push(b);
+        });
+        ans.appendChild(o);
+      }else{
+        input=el(`<input type="text" inputmode="decimal" id="qa${idx}" aria-label="Answer to question ${idx+1}" placeholder="Your answer">`);
+        const chk=el('<button type="button" class="primary">Check</button>');
+        const nw=el('<button type="button">New numbers</button>');
+        function check(){
+          const raw=input.value.trim().replace(',','.');
+          let v=NaN;
+          if(/^-?\d*\.?\d+$/.test(raw))v=parseFloat(raw);
+          else if(/^-?\d+\s*\/\s*\d+$/.test(raw)){const p=raw.split('/');v=parseFloat(p[0])/parseFloat(p[1]);}
+          if(isNaN(v)){fb.textContent='Enter a number first.';fb.className='fb bad';return;}
+          if(Math.abs(v-data.ans)<=data.tol){fb.textContent='Correct.';fb.className='fb ok';solved.add(idx);upd();sol.hidden=false;}
+          else{fb.textContent='Not quite. Check your fraction of the way, or show the solution.';fb.className='fb bad';}
+        }
+        chk.addEventListener('click',check);
+        input.addEventListener('keydown',e=>{if(e.key==='Enter')check();});
+        nw.addEventListener('click',()=>{solved.delete(idx);upd();build();});
+        ans.append(input,chk,nw);
+      }
+      const show=el('<button type="button">Show solution</button>');
+      show.addEventListener('click',()=>{sol.hidden=!sol.hidden;});
+      ans.appendChild(show);
+    }
+    build();
+    w.append(tag,text,ans,fb,sol);root.append(w);
+  });
+  upd();
+  return {update(){},stop(){}};
+}
+
+/* ---------- 5 · Limits ---------- */
+function viewLimits(root){
+  let method='minmax',p=0.05,f=0.02,outl=true,hov=null,curIn=null,curLut=null;
+  const A=imgCard('Input image','pick'),B=imgCard('Output image');
+  const M=chartCard('The rule: input → output','');
+  const HA=histCard('Input histogram',''),HB=histCard('Output histogram','');
+  const cards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))"></div>');cards.append(A.el,B.el,M.el);
+  const hcards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))"></div>');hcards.append(HA.el,HB.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Choose Imin and Imax by</span>${seg('meth',[['minmax','Plain min and max'],['pct','Percentiles'],['peak','Peak cutoff']],'minmax')}<button type="button" id="outl" class="tog" aria-pressed="true">Add 8 hot and 8 dead pixels</button></div>`);
+  const ctlP=el(`<div class="controls" hidden>${slider('pp','Clip this share at each end',0,10,5,0.5,'%')}</div>`);
+  const ctlF=el(`<div class="controls" hidden>${slider('ff','Cutoff, as a share of the peak height',0,20,2,0.5,'%')}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const why=el('<div class="callout"><p></p></div>');
+  const ex=el('<p class="readout" aria-live="polite"></p>');
+  const facts=el(`<ul class="facts">
+    <li><b>Outliers decide the limits</b><span>One stray bright or dark pixel sets Imin or Imax, so most of the image barely stretches.</span></li>
+    <li><b>Clipping loses detail</b><span>Percentile or cutoff limits push the tails to pure black and white. Detail in those pixels is gone.</span></li>
+    <li><b>Already full range</b><span>If an image already has Imin = 0 and Imax = 255, stretching changes nothing, even when most pixels are crowded together.</span></li>
+    <li><b>Linear only</b><span>One straight line cannot spread out a crowded band while leaving other bands alone. Histogram equalization can.</span></li>
+    <li><b>No new levels</b><span>Gray levels move apart, so the histogram gets gaps. The image can look posterised if the input had few levels.</span></li>
+    <li><b>Noise is stretched too</b><span>The slope is above 1, so noise gets multiplied along with the signal.</span></li>
+    <li><b>Global, not local</b><span>The same line is used everywhere, so uneven lighting is not fixed.</span></li>
+    <li><b>Colour images</b><span>Stretching each of R, G and B on its own shifts hues. Stretch the brightness channel instead.</span></li>
+    <li><b>Flat image</b><span>If Imax = Imin the formula divides by zero. There is nothing to stretch.</span></li>
+  </ul>`);
+  root.append(el('<h2>Where contrast stretching struggles</h2>'),el('<p class="explain">The picture below starts dull and has a few stray pixels, like sensor noise: 8 stuck at 255 and 8 stuck at 0. Plain min and max sees the extremes and does almost nothing. Try the two fixes and watch the clipped percentages.</p>'),ctl,ctlP,ctlF,cards,info,why,ex,hcards,el('<h3>All the limitations at a glance</h3>'),facts);
+  const ob=$('#outl',root);
+  const segM=bindSeg(root,'meth',v=>{method=v;ctlP.hidden=v!=='pct';ctlF.hidden=v!=='peak';render();});
+  bindSlider(root,'pp',v=>{p=v/100;render();},'%');
+  bindSlider(root,'ff',v=>{f=v/100;render();},'%');
+  ob.addEventListener('click',()=>{outl=!outl;ob.setAttribute('aria-pressed',String(outl));render();});
+  function drawChart(){
+    const pts=[];if(hov!=null)pts.push({x:hov,y:curLut[hov],color:'--out',r:5});
+    mapDraw(M.cv,[{lut:curLut,color:'--ink',w:3}],{vlines:[curLim[0],curLim[1]],points:pts});
+  }
+  let curLim=[0,255];
+  function render(){
+    let src=makeDull(App.base,0.5,0);if(outl)src=addOutliers(src);curIn=src;
+    const h=histo(src);let lo,hi,thr=null;
+    if(method==='minmax'){[lo,hi]=minMax(src);}
+    else if(method==='pct'){[lo,hi]=pctLimits(h,SS,p);}
+    else{[lo,hi,thr]=peakLimits(h,f);}
+    if(hi<=lo){hi=Math.min(255,lo+1);if(hi<=lo)lo=hi-1;}
+    curLim=[lo,hi];
+    const lut=new Array(256);for(let v=0;v<256;v++)lut[v]=stretch8(v,lo,hi);curLut=lut;
+    const out=applyLUT(src,lut),ho=histo(out),[omn,omx]=minMax(out);
+    let cl=0,ch=0;for(let v=0;v<256;v++){if(v<lo)cl+=h[v];if(v>hi)ch+=h[v];}
+    grayCard(A,src);grayCard(B,out);
+    A.cap.textContent=outl?'Dull picture plus 16 stray pixels':'Dull picture';B.cap.textContent=`Values use ${omn} to ${omx}`;
+    const m=Math.max(maxOf(h),maxOf(ho));
+    histDraw(HA.cv,h,{color:'--in',max:m,hline:thr,markers:[{x:lo,label:'Imin '+lo},{x:hi,label:'Imax '+hi}]});
+    histDraw(HB.cv,ho,{color:'--out',max:m});
+    HA.cap.textContent=method==='peak'?'Dashed line = cutoff height. The scan starts at 0 and at 255 and stops at the first bar taller than the dashed line.':'Pink lines = the limits that will be used.';
+    HB.cap.textContent='Output histogram, same scale.';
+    M.cap.textContent='Pixels below Imin become 0 and pixels above Imax become 255, so the line flattens at both ends.';
+    info.innerHTML=`Limits used: <b>Imin = ${lo}</b>, <b>Imax = ${hi}</b> · clipped to black: <b>${(100*cl/SS).toFixed(2)}%</b> · clipped to white: <b>${(100*ch/SS).toFixed(2)}%</b>`;
+    let msg='';
+    if(method==='minmax')msg=outl?'The stray pixels make Imin = 0 and Imax = 255, so the formula becomes (I − 0) ÷ 255 × 255 = I. The output is the same as the input.':'Without stray pixels, plain min and max works well. Turn the stray pixels back on to see the problem.';
+    else if(method==='pct')msg=`Percentile limits: the lowest ${(p*100).toFixed(1)}% of pixels fall below Imin and the highest ${(p*100).toFixed(1)}% above Imax. The strays are ignored. The price is that these tail pixels are clipped to black or white. MathWorks' stretchlim clips 1% at each end by default, and 5% and 95% is the example given in the Edinburgh HIPR2 image-processing guide.`;
+    else msg=`Peak cutoff: find the tallest histogram bar (${maxOf(h)} pixels), set the cutoff to ${(f*100).toFixed(1)}% of it (${num(thr,1)} pixels), then scan inward from 0 upward and from 255 downward until a bar first rises above the cutoff. Sparse tails are ignored. The peak only sets the height of the cutoff, and the scan starts at the two ends. Walking outward from the peak instead would stop at the first low bar and could throw away a second hump, for example the bright objects in the Shapes image.`;
+    why.firstChild.textContent=msg;
+    exT();drawChart();
+  }
+  function exT(){ex.innerHTML=hov==null?'Point at the input picture to place a pixel on the rule.':`I = <b>${hov}</b> → O = <b>${curLut[hov]}</b>${hov<curLim[0]?' (clipped to black)':hov>curLim[1]?' (clipped to white)':''}`;}
+  A.cv.addEventListener('pointermove',e=>{const q=cellAt(A.cv,e,S);hov=curIn[q.y*S+q.x];drawChart();exT();});
+  A.cv.addEventListener('pointerleave',()=>{hov=null;drawChart();exT();});
+  return {update:render,stop(){}};
+}
+
+initApp([{short:"See it",build:viewSee},{short:"Any range",build:viewGeneral},{short:"Practice",build:viewPractice},{short:"Limits",build:viewLimits}],'landscape');
+</script>

@@ -1,0 +1,781 @@
+<title>Smoothing and Sharpening Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, step tabs, then a stage of cards. Blue always means the input or original, orange the output or result, rose outline the thing you are pointing at. */
+:root{
+  --bg:#F3F4F7;--surface:#FFFFFF;--ink:#111827;--muted:#566074;--line:#CFD5E0;
+  --accent:#C2185B;--in:#2A58C8;--out:#C4510C;--ok:#1E8A4C;--bad:#C62828;--tone:var(--ink);
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+    --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+  --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.25;margin:22px 0 6px}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--ink)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"],button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 11%,var(--surface));border-color:var(--ink);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px;image-rendering:pixelated}
+.card canvas.pick{cursor:crosshair}
+.card canvas.chart{aspect-ratio:1;background:var(--surface);image-rendering:auto}
+.card canvas.wide{aspect-ratio:512/170;background:var(--surface);image-rendering:auto}
+.card canvas.rulers{aspect-ratio:720/250;background:var(--surface);image-rendering:auto}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.controls[hidden]{display:none}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--ink)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b,.mono{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:72ch}
+.formula{font-family:var(--font-mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;overflow-x:auto;white-space:nowrap}
+.callout{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:8px;padding:12px 14px;margin:0 0 16px;max-width:72ch}
+.callout p{margin:0}
+.callout .mono{font-size:14px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+table.t tr[hidden]{display:none}
+table.t tr.cur td{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.q p{margin:0}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);align-self:flex-start}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ans input[type=text],table.sum input{height:36px;font:inherit;font-family:var(--font-mono);font-size:14px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.ans input[type=text]{width:130px}
+.fb{font-size:14px;min-height:20px}
+.fb.ok,.okc{color:var(--ok)}
+.fb.bad,.badc{color:var(--bad)}
+.sol{border-left:3px solid var(--line);padding:2px 0 2px 12px;font-size:14px;color:var(--muted)}
+.sol p{margin:2px 0}
+.sol[hidden]{display:none}
+.opts{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opts button{text-align:left}
+.opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.score{font-family:var(--font-mono);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 14px;padding:0;list-style:none}
+.facts li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts li b{display:block;font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+.facts li span{color:var(--muted)}
+.code{position:relative;margin:0 0 14px}
+.code pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.55}
+.code button{position:absolute;top:8px;right:8px;min-height:30px;padding:3px 10px;font-size:12px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Machine vision · spatial filtering</p>
+    <h1>Smoothing and sharpening lab</h1>
+    <p class="lede">Slide a window over a picture: mean, median and Gaussian smoothing (and what sigma does), sharpening, how the two compare, and whether smoothing can be undone.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-v="shapes" aria-pressed="false">Shapes</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">Stored as 128 × 128 gray pixels. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const S=128,SS=S*S;
+function clamp8(v){return v<0?0:v>255?255:v;}
+function histo(a){const h=new Uint32Array(256);for(let i=0;i<a.length;i++)h[a[i]]++;return h;}
+function minMax(a){let mn=255,mx=0;for(let i=0;i<a.length;i++){if(a[i]<mn)mn=a[i];if(a[i]>mx)mx=a[i];}return [mn,mx];}
+function cumul(h){const c=new Float64Array(h.length);let s=0;for(let i=0;i<h.length;i++){s+=h[i];c[i]=s;}return c;}
+function stretchRaw(v,imin,imax,omin,omax){return (v-imin)/(imax-imin)*(omax-omin)+omin;}
+function stretch8(v,imin,imax){return clamp8(Math.round(stretchRaw(v,imin,imax,0,255)));}
+function pctLimits(h,n,p){
+  const c=cumul(h);let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(c[v]>p*n){lo=v;break;}}
+  for(let v=255;v>=0;v--){const above=n-(v>0?c[v-1]:0);if(above>p*n){hi=v;break;}}
+  return [lo,hi];
+}
+function peakLimits(h,f){
+  let mx=0;for(let i=0;i<256;i++)if(h[i]>mx)mx=h[i];
+  const thr=f*mx;let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(h[v]>thr){lo=v;break;}}
+  for(let v=255;v>=0;v--){if(h[v]>thr){hi=v;break;}}
+  return [lo,hi,thr];
+}
+function eqLUT(h,n,mode){
+  const L=h.length,lut=new Array(L);let s=0;
+  for(let k=0;k<L;k++){s+=h[k];const x=(L-1)*s/n;lut[k]=mode==='floor'?Math.floor(x+1e-9):Math.round(x);}
+  return lut;
+}
+function eqLUTcv(h,n){
+  const lut=new Array(256).fill(0);let i=0;
+  while(i<256&&h[i]===0)i++;
+  if(i===256)return lut;
+  if(h[i]===n)return lut.fill(i);
+  const scale=255/(n-h[i]);let sum=0;lut[i]=0;i++;
+  for(;i<256;i++){sum+=h[i];lut[i]=Math.round(sum*scale);}
+  return lut;
+}
+function applyLUT(a,lut){const o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++)o[i]=lut[a[i]];return o;}
+function gammaV(v,g){return Math.round(255*Math.pow(v/255,g));}
+function linV(v,k,b){return clamp8(Math.round((v-128)*k+128+b));}
+function sCurveV(v,k){const x=v/255-0.5;return clamp8(Math.round(255*(Math.tanh(k*x)/(2*Math.tanh(k/2))+0.5)));}
+function meanStd(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];const m=s/a.length;let q=0;for(let i=0;i<a.length;i++){const d=a[i]-m;q+=d*d;}return [m,Math.sqrt(q/a.length)];}
+function levelsUsed(h){let c=0;for(let i=0;i<h.length;i++)if(h[i])c++;return c;}
+function lcg(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function makeDull(base,c,shift){
+  const lo=(255-255*c)/2,o=new Uint8ClampedArray(base.length);
+  for(let i=0;i<base.length;i++)o[i]=clamp8(Math.round(lo+base[i]*c+shift));
+  return o;
+}
+function addOutliers(a){
+  const o=Uint8ClampedArray.from(a);
+  for(let k=0;k<16;k++){const i=(k*2711+97)%a.length;o[i]=k%2?0:255;}
+  return o;
+}
+//CORE-END
+
+const BIG=720;
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function fmt(n){return n.toLocaleString('en-US');}
+function num(x,d){const k=Math.pow(10,d==null?3:d);const r=Math.round(x*k)/k;return String(Object.is(r,-0)?0:r);}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${String(o[0])===String(cur)}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+  return g;
+}
+function slider(id,label,min,max,val,step,suffix){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}${suffix||''}</output></label>`;
+}
+function bindSlider(root,id,cb,suffix){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=num(v,2)+(suffix||'');};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(+s.value);},get:()=>+s.value,el:s};
+}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function cellAt(cv,e,n){
+  const r=cv.getBoundingClientRect();
+  let x=Math.floor((e.clientX-r.left)/r.width*n),y=Math.floor((e.clientY-r.top)/r.height*n);
+  x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));
+  return {x,y};
+}
+function imgCard(label,extra,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" class="${extra||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(S,S),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function grayCard(card,arr){
+  const d=card.img.data;
+  for(let i=0;i<SS;i++){const o=i*4;d[o]=d[o+1]=d[o+2]=arr[i];d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function histCard(label,cap,w,h){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${w||512}" height="${h||170}" class="wide" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function chartCard(label,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="300" height="300" class="chart" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function histDraw(cv,h,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=16,pt=8;
+  const cMain=css(o.color||'--in'),cLine=css('--line'),cMut=css('--muted'),cAcc=css('--accent');
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  let mx=o.max||1;if(!o.max){for(let i=0;i<h.length;i++)if(h[i]>mx)mx=h[i];}
+  const bw=W/h.length,ph=H-pb-pt;
+  for(let i=0;i<h.length;i++){
+    const hh=h[i]/mx*ph;
+    g.fillStyle=(o.shade!=null&&i>o.shade)?cLine:cMain;
+    g.fillRect(i*bw,H-pb-hh,bw+0.5,hh);
+  }
+  g.fillStyle=cMut;g.fillRect(0,H-pb,W,1);
+  g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  [0,64,128,192,255].forEach(v=>{const x=(v+0.5)*W/256;g.fillRect(x,H-pb,1,4);g.textAlign=v===0?'left':v===255?'right':'center';g.fillText(String(v),v===0?1:v===255?W-1:x,H-3);});
+  if(o.cdf){
+    const c=cumul(h),tot=c[c.length-1]||1;g.strokeStyle=css('--ok');g.lineWidth=2;g.beginPath();
+    for(let i=0;i<h.length;i++){const x=(i+0.5)*bw,y=H-pb-c[i]/tot*ph;if(i===0)g.moveTo(x,y);else g.lineTo(x,y);}
+    g.stroke();
+  }
+  if(o.hline!=null){
+    const y=H-pb-o.hline/mx*ph;g.strokeStyle=cAcc;g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.setLineDash([]);
+  }
+  (o.markers||[]).forEach(m=>{
+    const x=(m.x+0.5)*bw;g.strokeStyle=m.color||cAcc;g.lineWidth=2;g.beginPath();g.moveTo(x,pt-4);g.lineTo(x,H-pb);g.stroke();
+    if(m.label){g.fillStyle=m.color||cAcc;g.textAlign=m.x>200?'right':'left';g.fillText(m.label,x+(m.x>200?-4:4),pt+6);}
+  });
+}
+function mapDraw(cv,series,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pl=30,pr=10,pt=10,pb=26;
+  const xd=o.xdom||[0,255],yd=o.ydom||[0,255];
+  const fx=x=>pl+(x-xd[0])/(xd[1]-xd[0])*(W-pl-pr),fy=y=>H-pb-(y-yd[0])/(yd[1]-yd[0])*(H-pb-pt);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  const D=o.div||4,ks=Array.from({length:D+1},(_,i)=>i);
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();
+  ks.forEach(k=>{const x=pl+k*(W-pl-pr)/D,y=pt+k*(H-pt-pb)/D;g.moveTo(x,pt);g.lineTo(x,H-pb);g.moveTo(pl,y);g.lineTo(W-pr,y);});
+  g.stroke();
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  g.textAlign='center';ks.forEach(k=>{const v=xd[0]+k*(xd[1]-xd[0])/D;g.fillText(num(v,xd[1]-xd[0]>=20?0:2),pl+k*(W-pl-pr)/D,H-12);});
+  g.textAlign='right';ks.forEach(k=>{const v=yd[0]+k*(yd[1]-yd[0])/D;g.fillText(num(v,yd[1]-yd[0]>=20?0:2),pl-4,H-pb-k*(H-pt-pb)/D+4);});
+  g.textAlign='right';g.fillText(o.xl||'input →',W-pr,H-1);g.textAlign='left';g.fillText(o.yl||'output ↑',pl+4,pt+9);
+  if(!o.nodiag&&xd[0]===yd[0]&&xd[1]===yd[1]){
+    g.setLineDash([4,4]);g.strokeStyle=css('--muted');g.lineWidth=1;g.beginPath();g.moveTo(fx(xd[0]),fy(yd[0]));g.lineTo(fx(xd[1]),fy(yd[1]));g.stroke();g.setLineDash([]);
+  }
+  series.forEach(s=>{
+    const pts=s.pts||Array.from(s.lut,(y,x)=>[x,y]);
+    g.strokeStyle=s.color?css(s.color):css('--ink');g.lineWidth=s.w||2.5;
+    g.setLineDash(s.dash||[]);g.beginPath();
+    if(!s.dots){pts.forEach((p,i)=>{const x=fx(p[0]),y=fy(p[1]);if(i===0)g.moveTo(x,y);else g.lineTo(x,y);});g.stroke();}
+    g.setLineDash([]);
+    if(s.dots){g.fillStyle=s.color?css(s.color):css('--ink');pts.forEach(p=>{g.beginPath();g.arc(fx(p[0]),fy(p[1]),4,0,2*Math.PI);g.fill();});}
+  });
+  (o.vlines||[]).forEach(x=>{g.strokeStyle=css('--accent');g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(fx(x),pt);g.lineTo(fx(x),H-pb);g.stroke();g.setLineDash([]);});
+  (o.points||[]).forEach(p=>{
+    g.fillStyle=css(p.color||'--accent');g.beginPath();g.arc(fx(p.x),fy(p.y),p.r||6,0,2*Math.PI);g.fill();
+    g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+  });
+}
+function codeBlock(getText){
+  const w=el('<div class="code"><pre></pre><button type="button">Copy</button></div>');
+  const pre=w.querySelector('pre'),btn=w.querySelector('button');
+  function refresh(){pre.textContent=getText();}
+  btn.addEventListener('click',async()=>{
+    const t=pre.textContent;let done=false;
+    try{await navigator.clipboard.writeText(t);done=true;btn.textContent='Copied';}catch(e){}
+    if(!done){
+      try{const r=document.createRange();r.selectNodeContents(pre);const s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';}catch(e){btn.textContent='Select text';}
+    }
+    setTimeout(()=>{btn.textContent='Copy';},1600);
+  });
+  refresh();
+  return {el:w,refresh};
+}
+function statsLine(a){
+  const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);
+  return `mean <b>${m.toFixed(0)}</b> · spread (std) <b>${sd.toFixed(0)}</b> · range <b>${mn}</b> to <b>${mx}</b>`;
+}
+
+/* ---------- images ---------- */
+let LAST_RGBA=null;
+function noisyGray(rgba,seed,amp){
+  const g=new Uint8ClampedArray(SS),r=lcg(seed);
+  for(let i=0;i<SS;i++){
+    const v=0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]+(r()+r()-1)*amp;
+    g[i]=Math.round(v<0?0:v>255?255:v);
+  }
+  return g;
+}
+function sceneLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  g.scale(0.5,0.5);
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,256,256);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,256,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,256,1);
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,11,6);
+}
+function sceneShapes(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,S);bg.addColorStop(0,'#141a22');bg.addColorStop(1,'#2a3340');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  g.fillStyle='#8c97a8';g.fillRect(14,70,40,40);g.fillRect(76,18,36,30);g.fillRect(70,84,44,30);
+  g.fillStyle='#ebe6d4';
+  [[34,34,16],[98,70,11],[40,92,9],[104,104,8]].forEach(a=>{g.beginPath();g.arc(a[0],a[1],a[2],0,2*Math.PI);g.fill();});
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,23,8);
+}
+function sceneCoins(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,S,S);bg.addColorStop(0,'#f4f1ea');bg.addColorStop(1,'#e4dfd3');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  const coin=(x,y,r,a,b)=>{
+    const rg=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);rg.addColorStop(0,a);rg.addColorStop(1,b);
+    g.fillStyle=rg;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1.2;g.beginPath();g.arc(x,y,r*0.72,0,2*Math.PI);g.stroke();
+  };
+  const GOLD=['#c99a24','#85620c'],COP=['#b8714a','#7a3f20'],SIL=['#a2adb8','#5f6a76'];
+  [[24,26,15,GOLD],[51,24,13,SIL],[92,28,14,COP],[113,34,10,GOLD],[30,66,12,COP],[60,70,16,GOLD],[94,72,12,SIL],[22,104,11,SIL],[52,102,13,GOLD],[84,104,15,COP],[107,99,9,SIL]].forEach(k=>coin(k[0],k[1],k[2],k[3][0],k[3][1]));
+  const id=g.getImageData(0,0,S,S).data,r=lcg(31),o=new Uint8ClampedArray(SS*4),gr=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const n=(r()+r()-1)*6;
+    for(let k=0;k<3;k++)o[i*4+k]=Math.round(Math.max(0,Math.min(255,id[i*4+k]+n)));
+    o[i*4+3]=255;
+    gr[i]=Math.round(0.299*o[i*4]+0.587*o[i*4+1]+0.114*o[i*4+2]);
+  }
+  LAST_RGBA=o;
+  return gr;
+}
+
+/* ---------- app frame ---------- */
+const App={base:null,name:'Landscape',views:[],panels:[],cur:0,steps:[]};
+function setBase(gray,name,rgba){App.base=gray;App.name=name;if(rgba)App.rgba=rgba;const v=App.views[App.cur];if(v)v.update();}
+const SCENES={landscape:['Landscape',()=>sceneLandscape()],shapes:['Shapes',()=>sceneShapes()],coins:['Coins',()=>sceneCoins()]};
+function initApp(steps,start){
+  App.steps=steps;start=start||'landscape';
+  const stage=$('#stage'),nav=$('#steps');
+  steps.forEach((s,i)=>{
+    const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+    b.addEventListener('click',()=>go(i));
+    nav.appendChild(b);
+    const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);App.panels.push(p);App.views.push(null);
+  });
+  function go(i){
+    const old=App.views[App.cur];if(old&&old.stop)old.stop();
+    App.cur=i;
+    App.panels.forEach((p,j)=>{p.hidden=j!==i;});
+    nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+    if(!App.views[i])App.views[i]=steps[i].build(App.panels[i]);
+    App.views[i].update();
+    $('#back').hidden=i===0;
+    $('#next').textContent=i===steps.length-1?'Start again':'Next';
+  }
+  $('#back').addEventListener('click',()=>go(Math.max(0,App.cur-1)));
+  $('#next').addEventListener('click',()=>go(App.cur===steps.length-1?0:App.cur+1));
+  const srcBtns=[...document.querySelectorAll('#src button')];
+  const setSource=v=>srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  const msg=$('#srcmsg'),DEF='Stored as 128 × 128 gray pixels. Everything runs in your browser.';
+  $('#src').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    const v=b.dataset.v;
+    if(SCENES[v]){setSource(v);msg.textContent=DEF;const gr=SCENES[v][1]();setBase(gr,SCENES[v][0],LAST_RGBA);}
+    else{$('#file').click();}
+  });
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+        const s=Math.min(im.width,im.height);
+        g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        const d=g.getImageData(0,0,S,S).data,gr=new Uint8ClampedArray(SS);
+        for(let i=0;i<SS;i++)gr[i]=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+        setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 128 × 128.';
+        setBase(gr,f.name,Uint8ClampedArray.from(d));
+      };
+      im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+      im.src=r.result;
+    };
+    r.onerror=()=>{msg.textContent='That file could not be read.';};
+    r.readAsDataURL(f);
+    e.target.value='';
+  });
+  if(window.matchMedia){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const rr=()=>{const v=App.views[App.cur];if(v)v.update();};
+    if(mq.addEventListener)mq.addEventListener('change',rr);
+  }
+  App.base=SCENES[start][1]();App.rgba=LAST_RGBA;
+  go(0);
+  App.go=go;
+}
+
+//SM-CORE-START
+function refl(i,n){while(i<0||i>=n){if(i<0)i=-i;if(i>=n)i=2*n-2-i;}return i;}
+function repl(i,n){return i<0?0:i>=n?n-1:i;}
+function sepF(a,wx,wy){
+  const rx=(wx.length-1)>>1,ry=(wy.length-1)>>1,t=new Float32Array(SS),o=new Float32Array(SS);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){let s=0;for(let k=0;k<wx.length;k++)s+=wx[k]*a[y*S+refl(x+k-rx,S)];t[y*S+x]=s;}
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){let s=0;for(let k=0;k<wy.length;k++)s+=wy[k]*t[refl(y+k-ry,S)*S+x];o[y*S+x]=s;}
+  return o;
+}
+function toU8(f){const o=new Uint8ClampedArray(f.length);for(let i=0;i<f.length;i++)o[i]=Math.round(f[i]);return o;}
+function boxW(k){return Array.from({length:k},()=>1/k);}
+function gaussW(sigma,k){const r=(k-1)/2,w=[];let s=0;for(let i=0;i<k;i++){const v=Math.exp(-((i-r)*(i-r))/(2*sigma*sigma));w.push(v);s+=v;}return w.map(v=>v/s);}
+function binomW(k){const b=k===3?[1,2,1]:[1,4,6,4,1],s=b.reduce((x,y)=>x+y,0);return b.map(v=>v/s);}
+function autoSize(sigma){return Math.min(51,2*Math.ceil(3*sigma)+1);}
+function meanF(a,k){return toU8(sepF(a,boxW(k),boxW(k)));}
+function gaussF(a,sigma,k){const w=gaussW(sigma,k||autoSize(sigma));return sepF(a,w,w);}
+function medianF(a,k){
+  const r=(k-1)>>1,o=new Uint8ClampedArray(SS),w=new Uint8Array(k*k);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    let n=0;for(let j=-r;j<=r;j++)for(let i=-r;i<=r;i++)w[n++]=a[repl(y+j,S)*S+repl(x+i,S)];
+    w.sort();o[y*S+x]=w[(k*k)>>1];
+  }
+  return o;
+}
+function lapDetail(a){
+  const o=new Float32Array(SS);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    const c=a[y*S+x];
+    o[y*S+x]=4*c-a[refl(y-1,S)*S+x]-a[refl(y+1,S)*S+x]-a[y*S+refl(x-1,S)]-a[y*S+refl(x+1,S)];
+  }
+  return o;
+}
+function addDetail(a,detail,amt){const o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)o[i]=Math.round(a[i]+amt*detail[i]);return o;}
+function blurDetail(a,sigma){const b=gaussF(a,sigma),d=new Float32Array(SS);for(let i=0;i<SS;i++)d[i]=a[i]-b[i];return {blur:b,detail:d};}
+function psnr(a,b){let s=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];s+=d*d;}const m=s/a.length;return m===0?Infinity:10*Math.log10(255*255/m);}
+function edgeStrength(a){let s=0,n=0;for(let y=1;y<S-1;y++)for(let x=1;x<S-1;x++){const dx=a[y*S+x+1]-a[y*S+x-1],dy=a[(y+1)*S+x]-a[(y-1)*S+x];s+=Math.sqrt(dx*dx+dy*dy)/2;n++;}return s/n;}
+function addGauss(a,sd,seed){const r=lcg(seed),o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i+=1){const u=Math.max(r(),1e-9),v=r(),z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);o[i]=Math.round(a[i]+sd*z);}return o;}
+function addSP(a,frac,seed){const r=lcg(seed),o=Uint8ClampedArray.from(a);for(let i=0;i<SS;i++){const u=r();if(u<frac/2)o[i]=0;else if(u<frac)o[i]=255;}return o;}
+//SM-CORE-END
+
+const pick=(r,a)=>a[Math.floor(r()*a.length)];
+const NZ_ALL=[['none','No noise'],['gauss','Gaussian noise'],['sp','Salt and pepper']];
+let nzC={base:null,m:{}};
+function noisy(kind){
+  if(nzC.base!==App.base)nzC={base:App.base,m:{}};
+  if(kind==='none')return App.base;
+  return nzC.m[kind]||(nzC.m[kind]=kind==='gauss'?addGauss(App.base,20,5):addSP(App.base,0.06,9));
+}
+function paintG(card,a,row){
+  grayCard(card,a);
+  if(row!=null){card.ctx.globalAlpha=0.85;card.ctx.fillStyle=css('--accent');card.ctx.fillRect(0,row,S,1);card.ctx.globalAlpha=1;}
+}
+function grid(w){return el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,${w}px),1fr))"></div>`);}
+function profileDraw(cv,series,row){
+  mapDraw(cv,series.map(s=>({pts:Array.from({length:S},(_,x)=>[x,s.a[row*S+x]]),color:s.color,w:s.w||2,dash:s.dash})),{xdom:[0,S-1],ydom:[0,255],nodiag:true,xl:'column →',yl:'gray ↑'});
+}
+function fmtP(p){return p===Infinity?'∞':p.toFixed(1);}
+function swatches(items){return items.map(i=>`<span class="swatch" style="background:var(${i[0]})"></span>${i[1]}`).join(' <span style="display:inline-block;width:8px"></span>');}
+function toDetailImg(d,gain){const o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)o[i]=Math.round(128+gain*d[i]);return o;}
+
+/* ---------- 1 · How a filter works ---------- */
+function viewHow(root){
+  let f='mean',k=3,nz='none',px=64,py=64,cache=null;
+  const A=imgCard('Input · point at a pixel','pick'),B=imgCard('Output');
+  const top=grid(240);top.append(A.el,B.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Filter</span>${seg('f',[['mean','Mean'],['median','Median'],['gauss','Gaussian']],'mean')}<span class="ctl-label">Window</span>${seg('k',[['3','3 × 3'],['5','5 × 5']],'3')}<span class="ctl-label">Input</span>${seg('nz',[['none','Clean'],['sp','With salt and pepper']],'none')}</div>`);
+  const nbC=el('<figure class="card"><figcaption class="cl">Pixels under the window</figcaption><div class="scroll nb"></div></figure>');
+  const kC=el('<figure class="card"><figcaption class="cl kl">Weights</figcaption><div class="scroll kw"></div></figure>');
+  const two=grid(280);two.append(nbC,kC);
+  const calc=el('<div class="formula" aria-live="polite" style="white-space:normal"></div>');
+  const note=el('<p class="note"></p>');
+  root.append(el('<h2>How a smoothing filter works</h2>'),el('<p class="explain">A filter slides a small window over the picture. At every pixel it looks at the neighbours under the window and combines them into one new value. The three filters differ only in <b>how they combine</b>. Point at any pixel in the input to see the numbers.</p>'),ctl,top,two,calc,note);
+  bindSeg(root,'f',v=>{f=v;render();});bindSeg(root,'k',v=>{k=+v;render();});bindSeg(root,'nz',v=>{nz=v;render();});
+  A.cv.addEventListener('pointermove',e=>{const p=cellAt(A.cv,e,S);px=p.x;py=p.y;marks();});
+  A.cv.addEventListener('click',e=>{const p=cellAt(A.cv,e,S);px=p.x;py=p.y;marks();});
+  function out(src){
+    if(cache&&cache.src===src&&cache.f===f&&cache.k===k)return cache.o;
+    const o=f==='mean'?meanF(src,k):f==='median'?medianF(src,k):toU8(sepF(src,binomW(k),binomW(k)));
+    cache={src,f,k,o};return o;
+  }
+  function marks(){
+    const src=noisy(nz),o=out(src),r=(k-1)>>1;
+    paintG(A,src);paintG(B,o);
+    A.ctx.strokeStyle=css('--accent');A.ctx.lineWidth=1.5;A.ctx.strokeRect(px-r-0.5,py-r-0.5,k+1,k+1);
+    B.ctx.fillStyle=css('--accent');B.ctx.fillRect(px-1,py-1,3,3);
+    const vals=[];let h='<table class="t"><tbody>';
+    for(let j=-r;j<=r;j++){h+='<tr>';for(let i=-r;i<=r;i++){const v=src[refl(py+j,S)*S+refl(px+i,S)];vals.push(v);h+=`<td class="num" style="${i===0&&j===0?'background:color-mix(in srgb,var(--accent) 18%,var(--surface));font-weight:600':''}">${v}</td>`;}h+='</tr>';}
+    nbC.querySelector('.nb').innerHTML=h+'</tbody></table>';
+    const n=vals.length;let res,txt;
+    if(f==='mean'){
+      const s=vals.reduce((x,y)=>x+y,0);res=Math.round(s/n);
+      kC.querySelector('.kl').textContent='Weights: every pixel counts the same';
+      kC.querySelector('.kw').innerHTML='<table class="t"><tbody>'+Array.from({length:k},()=>'<tr>'+Array.from({length:k},()=>`<td class="num">1/${n}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
+      txt=`(${vals.join(' + ')}) ÷ ${n} = ${s} ÷ ${n} = <b>${num(s/n,2)}</b> → <b>${res}</b>`;
+    }else if(f==='median'){
+      const sv=vals.slice().sort((a,b)=>a-b);res=sv[n>>1];
+      kC.querySelector('.kl').textContent='No weights: sort and take the middle';
+      kC.querySelector('.kw').innerHTML='<table class="t"><tbody><tr>'+sv.map((v,i)=>`<td class="num" style="${i===n>>1?'background:color-mix(in srgb,var(--out) 22%,var(--surface));font-weight:600':''}">${v}</td>`).join('')+'</tr></tbody></table><p class="note" style="margin:6px 0 0">Sorted from smallest to largest. The middle one wins.</p>';
+      txt=`sorted: ${sv.join(', ')} → middle (number ${(n>>1)+1} of ${n}) = <b>${res}</b>`;
+    }else{
+      const w1=k===3?[1,2,1]:[1,4,6,4,1],tot=k===3?16:256;let s=0;
+      kC.querySelector('.kl').textContent=`Weights: bell shape, ÷ ${tot}`;
+      kC.querySelector('.kw').innerHTML='<table class="t"><tbody>'+w1.map(a=>'<tr>'+w1.map(b=>`<td class="num">${a*b}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
+      let idx=0;w1.forEach(a=>w1.forEach(b=>{s+=a*b*vals[idx++];}));res=Math.round(s/tot);
+      txt=`Σ weight × pixel = ${s} ÷ ${tot} = <b>${num(s/tot,2)}</b> → <b>${res}</b>`;
+    }
+    calc.innerHTML=`Pixel (${px}, ${py}): ${txt}`;
+    note.textContent=(f==='gauss'?'These weights are the binomial numbers (1 2 1, or 1 4 6 4 1), which are a close whole-number version of a Gaussian. ':'')+'Near the border the window would hang outside the picture, so the missing neighbours are mirrored from inside.'+(f==='median'?' Try the salt and pepper input: the median ignores a stray black or white pixel because it sorts to the end of the list.':f==='mean'&&nz==='sp'?' Point at a white or black speck: the mean drags the neighbours toward it, so the speck becomes a gray smudge instead of disappearing.':'');
+  }
+  function render(){marks();}
+  return {update(){cache=null;render();},stop(){}};
+}
+
+/* ---------- 2 · Mean, median, Gaussian ---------- */
+function viewMMG(root){
+  let nz='sp',k=5,sg=1.5,row=64;
+  const I=imgCard('Noisy input'),M=imgCard('Mean'),D=imgCard('Median'),G=imgCard('Gaussian');
+  const cards=grid(190);cards.append(I.el,M.el,D.el,G.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Noise</span>${seg('nz',NZ_ALL,'sp')}<span class="ctl-label">Window</span>${seg('k',[[3,'3'],[5,'5'],[7,'7'],[9,'9'],[11,'11']],5)}</div>`);
+  const ctl2=el(`<div class="controls">${slider('sg','Gaussian σ',0.5,4,1.5,0.1)}${slider('row','Profile row',2,125,64)}</div>`);
+  const P=histCard('Gray values along the pink row','',720,230);
+  const tw=el('<div class="scroll"></div>');
+  const verdict=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Mean, median and Gaussian side by side</h2>'),el('<p class="explain">Same noisy picture, same window size, three ways of combining the neighbours. Switch the noise type and watch which filter copes. The pink row is plotted below, so you can see what happens at an edge.</p>'),ctl,ctl2,cards,P.el,tw,verdict);
+  bindSeg(root,'nz',v=>{nz=v;render();});bindSeg(root,'k',v=>{k=+v;render();});
+  bindSlider(root,'sg',v=>{sg=v;render();});bindSlider(root,'row',v=>{row=v;render();});
+  let cacheKey='',res=null;
+  function render(){
+    const src=noisy(nz),key=nz+'|'+k+'|'+sg+'|'+(App.base===nzC.base?'':'x');
+    if(cacheKey!==key||!res||res.src!==src){res={src,m:meanF(src,k),d:medianF(src,k),g:toU8(gaussF(src,sg,k))};cacheKey=key;}
+    const ref=App.base;
+    paintG(I,src,row);paintG(M,res.m,row);paintG(D,res.d,row);paintG(G,res.g,row);
+    I.cap.textContent=nz==='none'?'Clean':nz==='gauss'?'Every pixel nudged a little':'About 6% of pixels are black or white';
+    M.cap.textContent=`${k} × ${k} window`;D.cap.textContent=`${k} × ${k} window`;G.cap.textContent=`${k} × ${k} window, σ = ${sg}`;
+    profileDraw(P.cv,[{a:ref,color:'--muted',w:1.5,dash:[4,4]},{a:res.m,color:'--in'},{a:res.d,color:'--out'},{a:res.g,color:'--ok'}],row);
+    P.cap.innerHTML=swatches([['--muted','clean original (dashed)'],['--in','mean'],['--out','median'],['--ok','Gaussian']])+'. Steeper steps mean sharper edges.';
+    const rows=[['Input (noisy)',src],['Mean',res.m],['Median',res.d],['Gaussian',res.g]].map(r=>({n:r[0],p:psnr(r[1],ref),e:edgeStrength(r[1])}));
+    const eRef=edgeStrength(ref);
+    tw.innerHTML=`<table class="t"><thead><tr><th>Result</th><th class="num">PSNR vs clean (dB)</th><th class="num">Edge strength</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.n}</td><td class="num">${fmtP(r.p)}</td><td class="num">${r.e.toFixed(1)}</td></tr>`).join('')}<tr><td>Clean original</td><td class="num">∞</td><td class="num">${eRef.toFixed(1)}</td></tr></tbody></table><p class="note" style="margin:6px 0 0">PSNR says how close the result is to the clean picture (higher is better). Edge strength is the average size of the change between neighbouring pixels: noise raises it, blurring lowers it, so a good filter lands near the clean value.</p>`;
+    const best=rows.slice(1).reduce((a,b)=>b.p>a.p?b:a);
+    let msg;
+    if(nz==='sp')msg='Salt and pepper noise is a few extreme pixels. The median throws them away because they sort to the ends of the list, so it removes them completely and keeps edges. The mean and the Gaussian blend each speck into its neighbours, leaving a gray smudge.';
+    else if(nz==='gauss')msg='Gaussian noise nudges every pixel a little. Averaging cancels the up and down nudges, which is why the mean and the Gaussian are the textbook choice, and they do best with small windows. The median also reduces this noise, and with a larger window on a picture with clear edges it can even score higher, because it does not smear edges the way averaging does. All three cost some blur.';
+    else msg='There is no noise, so nothing needs removing and every filter only costs detail. Compare edge strength with the clean original to see how much each one blurs.';
+    const extra=nz==='sp'&&best.n!=='Median'?' On this picture the median loses on PSNR even though the specks are gone, because it also flattens fine detail such as the window grid and the water stripes. Try a smaller window.':'';
+    verdict.firstChild.innerHTML=`${msg}${extra} <b>Highest PSNR at these settings: ${best.n}.</b>`;
+  }
+  return {update(){cacheKey='';render();},stop(){}};
+}
+
+/* ---------- 3 · Gaussian sigma ---------- */
+function barsW(cv,w){
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=22,pt=10,n=w.length,bw=W/n,mx=Math.max(...w);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  g.fillStyle=css('--out');
+  w.forEach((v,i)=>{const h=v/mx*(H-pb-pt);g.fillRect(i*bw+Math.min(2,bw*0.15),H-pb-h,Math.max(1,bw-2*Math.min(2,bw*0.15)),h);});
+  g.fillStyle=css('--muted');g.fillRect(0,H-pb,W,1);g.font='11px "JetBrains Mono",monospace';
+  const r=(n-1)/2;g.textAlign='left';g.fillText('−'+r,2,H-6);g.textAlign='center';g.fillText('0',W/2,H-6);g.textAlign='right';g.fillText('+'+r,W-2,H-6);
+}
+function viewSigma(root){
+  let sg=1.5,k=autoSize(1.5),auto=true,row=64;
+  const A=imgCard('Original'),G=imgCard('Gaussian'),X=imgCard('Plain mean, same size');
+  const top=grid(190);top.append(A.el,G.el,X.el);
+  const K=histCard('The weights in one row of the kernel','',720,190);
+  const ctl=el(`<div class="controls">${slider('sg','σ (sigma)',0.3,8,1.5,0.1)}${slider('ks','Window size',3,51,autoSize(1.5),2)}<button type="button" id="auto" class="tog" aria-pressed="true">Size chosen from σ</button></div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const P=histCard('Gray values along the pink row','',720,230);
+  const gal=grid(150);
+  const note=el('<div class="callout"><p><b>Rule of thumb.</b> A Gaussian is almost zero beyond 3σ from the centre, so a window of about 6σ + 1 pixels holds nearly all of it. σ sets how much blur you get. The window size only has to be big enough not to cut the bell off. If you choose a window that is too small, the edges of the window slice the bell and the result drifts toward a plain mean.</p></div>');
+  root.append(el('<h2>What σ does in a Gaussian blur</h2>'),el('<p class="explain">A Gaussian filter uses a bell-shaped set of weights: the centre pixel counts most and the weight falls away smoothly with distance. The single number σ sets how wide the bell is. Larger σ means a wider bell, so more neighbours matter and the blur is stronger.</p>'),ctl,K.el,info,top,P.el,el('<h3>The same picture at four σ values</h3>'),gal,note);
+  const ss=bindSlider(root,'sg',v=>{sg=v;if(auto){k=autoSize(sg);sk.set(k);}render();});
+  const sk=bindSlider(root,'ks',v=>{k=v%2?v:v+1;auto=false;ab.setAttribute('aria-pressed','false');render();});
+  const ab=$('#auto',root);
+  ab.addEventListener('click',()=>{auto=true;ab.setAttribute('aria-pressed','true');k=autoSize(sg);sk.set(k);render();});
+  const gcards=[0.5,1,2,4].map(s=>{const c=imgCard('sigma = '+s);gal.append(c.el);return {s,c};});
+  function render(){
+    const src=App.base,w=gaussW(sg,k),gf=toU8(sepF(src,w,w)),bx=meanF(src,k);
+    paintG(A,src,row);paintG(G,gf,row);paintG(X,bx,row);
+    G.cap.textContent=`σ = ${num(sg,1)}, ${k} × ${k} window`;X.cap.textContent=`${k} × ${k}: every weight equal`;
+    barsW(K.cv,w);K.cap.textContent='Each bar is how much a pixel at that distance from the centre counts. They add up to 1.';
+    const full=(()=>{const kk=Math.min(201,2*Math.ceil(5*sg)+1);const r=(kk-1)/2;let s=0;for(let i=0;i<kk;i++)s+=Math.exp(-((i-r)*(i-r))/(2*sg*sg));return s;})();
+    const r=(k-1)/2;let inside=0;for(let i=0;i<k;i++)inside+=Math.exp(-((i-r)*(i-r))/(2*sg*sg));
+    const share=Math.min(1,inside/full);
+    info.innerHTML=`Centre weight <b>${(w[(k-1)/2]*100).toFixed(1)}%</b> · outermost weight <b>${(w[0]*100).toFixed(2)}%</b> · the window holds <b>${(share*100).toFixed(1)}%</b> of the full bell${share<0.97?' <span class="badc">(too small: the bell is cut off)</span>':''} · 6σ + 1 is about <b>${Math.ceil(6*sg)+1}</b>, so use an odd size of <b>${autoSize(sg)}</b>`;
+    profileDraw(P.cv,[{a:src,color:'--muted',w:1.5,dash:[4,4]},{a:gf,color:'--ok'},{a:bx,color:'--in',w:1.5}],row);
+    P.cap.innerHTML=swatches([['--muted','original (dashed)'],['--ok','Gaussian'],['--in','plain mean, same size']])+'. The Gaussian rounds corners smoothly, the mean cuts straight across.';
+    gcards.forEach(g=>{paintG(g.c,toU8(gaussF(src,g.s)));g.c.cap.textContent=`${autoSize(g.s)} × ${autoSize(g.s)} window`;});
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 4 · Sharpening ---------- */
+function viewSharp(root){
+  let m='unsharp',nz='none',sg=1.5,am=1.5,row=64;
+  const A=imgCard('Input'),B=imgCard('Blurred copy'),Dt=imgCard('Detail = input − blurred (gray = zero)'),R=imgCard('Sharpened');
+  const cards=grid(190);cards.append(A.el,B.el,Dt.el,R.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Method</span>${seg('m',[['unsharp','Unsharp mask'],['lap','Laplacian kernel']],'unsharp')}<span class="ctl-label">Input</span>${seg('nz',[['none','Clean'],['gauss','Noisy']],'none')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('sg','Blur σ',0.5,4,1.5,0.1)}${slider('am','Amount',0,400,150,5,'%')}${slider('row','Profile row',2,125,64)}</div>`);
+  const eq=el('<div class="formula" aria-live="polite"></div>');
+  const P=histCard('Gray values along the pink row','',720,230);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const kw=el('<div class="scroll"></div>');
+  const note=el('<div class="callout"><p></p></div>');
+  root.append(el('<h2>Image sharpening</h2>'),el('<p class="explain">Sharpening adds back the <b>detail</b> that blurring would remove. Take the difference between the picture and a blurred copy of itself: that difference is the fine detail and edges. Add some of it back, and edges look crisper.</p>'),ctl,ctl2,eq,cards,P.el,info,kw,note);
+  bindSeg(root,'m',v=>{m=v;render();});bindSeg(root,'nz',v=>{nz=v;render();});
+  bindSlider(root,'sg',v=>{sg=v;render();});bindSlider(root,'am',v=>{am=v/100;render();},'%');bindSlider(root,'row',v=>{row=v;render();});
+  function render(){
+    const src=nz==='gauss'?noisy('gauss'):App.base,u=m==='unsharp';
+    let detail,blur=null;
+    if(u){const r=blurDetail(src,sg);detail=r.detail;blur=toU8(r.blur);}else detail=lapDetail(src);
+    const out=addDetail(src,detail,am);
+    paintG(A,src,row);paintG(R,out,row);
+    if(u)paintG(B,blur);else{paintG(B,toU8(sepF(src,[0.25,0.5,0.25],[0.25,0.5,0.25])));}
+    B.el.hidden=!u;
+    paintG(Dt,toDetailImg(detail,u?3:1));
+    Dt.lab.textContent=u?'Detail = input − blurred (gray = zero)':'Detail = 4 × centre − 4 neighbours (gray = zero)';
+    A.cap.textContent=nz==='gauss'?'With noise added':'';R.cap.textContent=`Input + ${Math.round(am*100)}% of the detail`;
+    eq.textContent=u?`sharpened = input + ${num(am,2)} × (input − blurred)`:`sharpened = input + ${num(am,2)} × (4 × centre − up − down − left − right)`;
+    profileDraw(P.cv,[{a:src,color:'--muted',w:1.5,dash:[4,4]},{a:out,color:'--out',w:2.2}],row);
+    P.cap.innerHTML=swatches([['--muted','input (dashed)'],['--out','sharpened']])+'. Look beside each edge: the curve dips below and rises above the original. That overshoot is what makes edges look crisper, and what makes halos if you overdo it.';
+    let clipped=0;for(let i=0;i<SS;i++){const v=Math.round(src[i]+am*detail[i]);if(v<0||v>255)clipped++;}
+    info.innerHTML=`Edge strength: <b>${edgeStrength(src).toFixed(1)}</b> → <b>${edgeStrength(out).toFixed(1)}</b> · pixels pushed past black or white and clipped: <b>${(clipped/SS*100).toFixed(1)}%</b> · mean brightness: <b>${meanStd(src)[0].toFixed(0)}</b> → <b>${meanStd(out)[0].toFixed(0)}</b>`;
+    if(u){kw.innerHTML='';}
+    else{const c=num(1+4*am,2),n=num(-am,2);kw.innerHTML=`<p class="cl" style="margin:0 0 6px">The same thing as one kernel</p><table class="t"><tbody><tr><td class="num">0</td><td class="num">${n}</td><td class="num">0</td></tr><tr><td class="num">${n}</td><td class="num"><b>${c}</b></td><td class="num">${n}</td></tr><tr><td class="num">0</td><td class="num">${n}</td><td class="num">0</td></tr></tbody></table><p class="note" style="margin:6px 0 0">With amount 100% this is the classic 0, −1, 0 / −1, 5, −1 / 0, −1, 0 kernel. The weights add up to 1, so flat areas keep their brightness.</p>`;}
+    note.firstChild.innerHTML=nz==='gauss'?'<b>Sharpening amplifies noise.</b> Noise is fine detail too, so the difference image contains it, and adding it back makes the speckle stronger. This is why people often smooth lightly first, or keep the amount low.':'<b>Try the noisy input.</b> Sharpening cannot tell edges from noise, because both are fast changes between neighbouring pixels. Push the amount up and watch for halos next to strong edges.';
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 5 · Smoothing vs sharpening ---------- */
+function viewVs(root){
+  let s=-1,sg=1.5;
+  const A=imgCard('Original'),R=imgCard('Result');
+  const top=grid(220);
+  const K=histCard('The effective kernel (one row)','',512,190);
+  const Pc=histCard('Gray values along row 64','',512,190);
+  const kc=grid(300);kc.append(K.el,Pc.el);top.append(A.el,R.el);
+  const ctl=el(`<div class="controls">${slider('s','← smooth · sharpen →',-100,300,-100,5,'%')}${slider('sg','σ',0.8,3,1.5,0.1)}<button type="button" id="z" >Reset to 0</button></div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const code=codeBlock(()=>`import cv2
+import numpy as np
+
+img = cv2.imread("photo.jpg", cv2.IMREAD_GRAYSCALE)
+
+# smoothing
+mean   = cv2.blur(img, (5, 5))
+median = cv2.medianBlur(img, 5)                       # best for salt and pepper
+gauss  = cv2.GaussianBlur(img, (0, 0), sigmaX=1.5)    # window size chosen from sigma
+
+# sharpening: unsharp mask = img + amount * (img - blurred)
+amount = 1.5
+sharp = cv2.addWeighted(img, 1 + amount, gauss, -amount, 0)
+
+# sharpening with one kernel
+kernel = np.array([[ 0, -1,  0],
+                   [-1,  5, -1],
+                   [ 0, -1,  0]], dtype=np.float32)
+sharp2 = cv2.filter2D(img, -1, kernel)`);
+  const cmp=el(`<div class="scroll"><table class="t"><thead><tr><th></th><th>Smoothing</th><th>Sharpening</th></tr></thead><tbody>
+    <tr><td><b>Goal</b></td><td>Remove noise, hide small detail</td><td>Make edges and fine detail stand out</td></tr>
+    <tr><td><b>What it does to a sudden change</b></td><td>Spreads it out into a gentle slope</td><td>Makes it steeper, with a small overshoot on each side</td></tr>
+    <tr><td><b>Kernel weights</b></td><td>All positive, add up to 1 (a blend)</td><td>Positive centre, negative neighbours, add up to 1 (a contrast boost)</td></tr>
+    <tr><td><b>In terms of frequency</b></td><td>Low-pass: keeps slow changes, reduces fast ones</td><td>Boosts the fast changes (high frequencies) and keeps the slow ones</td></tr>
+    <tr><td><b>Effect on noise</b></td><td>Reduces it</td><td>Amplifies it</td></tr>
+    <tr><td><b>Average brightness</b></td><td>Unchanged</td><td>Unchanged</td></tr>
+    <tr><td><b>Overdo it and you get</b></td><td>A blurry smear</td><td>Halos, harsh edges, crawling noise</td></tr>
+    <tr><td><b>Typical use</b></td><td>Clean up before thresholding or edge detection</td><td>Finishing step to make the picture look crisp</td></tr>
+  </tbody></table></div>`);
+  root.append(el('<h2>Smoothing and sharpening are opposites</h2>'),el('<p class="explain">Both use the same idea: output = input + amount × (input − blurred). With a negative amount you subtract the detail, which is smoothing. With a positive amount you add it, which is sharpening. At −100% you get the blurred picture itself. Slide through zero and watch the kernel change shape.</p>'),ctl,top,info,kc,el('<h3>Side by side</h3>'),cmp,el('<h3>In OpenCV</h3>'),code.el);
+  const sl=bindSlider(root,'s',v=>{s=v/100;render();},'%');bindSlider(root,'sg',v=>{sg=v;render();});
+  $('#z',root).addEventListener('click',()=>{s=0;sl.set(0);render();});
+  function render(){
+    const src=App.base,{blur,detail}=blurDetail(src,sg),out=addDetail(src,detail,s);
+    paintG(A,src,64);paintG(R,out,64);
+    R.cap.textContent=s<0?`Smoothing: ${Math.round(-s*100)}% of the way to the blurred picture`:s===0?'No change':`Sharpening: ${Math.round(s*100)}% of the detail added back`;
+    const r=Math.min(12,autoSize(sg)>>1),n=2*r+1,g=gaussW(sg,n);
+    // effective kernel = delta + s*(delta - g) = (1+s)*delta - s*g
+    const eff=g.map((v,i)=>(i===r?1+s:0)-s*v);
+    const w=Math.max(...eff.map(Math.abs));
+    const c=K.cv.getContext('2d'),W=K.cv.width,H=K.cv.height,mid=H*0.62;
+    c.clearRect(0,0,W,H);c.fillStyle=css('--surface');c.fillRect(0,0,W,H);
+    const bw=W/n;
+    eff.forEach((v,i)=>{const h=v/w*(H*0.5);c.fillStyle=css(v>=0?'--out':'--in');c.fillRect(i*bw+2,v>=0?mid-h:mid,bw-4,Math.abs(h));});
+    c.fillStyle=css('--muted');c.fillRect(0,mid,W,1);
+    c.font='11px "JetBrains Mono",monospace';c.textAlign='left';c.fillText('orange = positive weight, blue = negative weight',4,12);
+    const sum=eff.reduce((x,y)=>x+y,0);
+    K.cap.textContent=`Centre weight ${num(eff[r],2)}. The weights add up to ${num(sum,2)}.`;
+    profileDraw(Pc.cv,[{a:src,color:'--muted',w:1.5,dash:[4,4]},{a:out,color:'--out'}],64);
+    Pc.cap.innerHTML=swatches([['--muted','original (dashed)'],['--out','result']]);
+    info.innerHTML=`Edge strength: <b>${edgeStrength(src).toFixed(1)}</b> → <b>${edgeStrength(out).toFixed(1)}</b> · Negative weights mean sharpening. Smoothing never has any.`;
+  }
+  return {update(){render();code.refresh();},stop(){}};
+}
+
+/* ---------- 6 · Can we get it back? ---------- */
+function viewBack(root){
+  let f='gauss',k=7,am=2;
+  const A=imgCard('Original'),B=imgCard('Smoothed'),C=imgCard('Sharpened to try to undo it'),E=imgCard('Error: how far from the original');
+  const cards=grid(190);cards.append(A.el,B.el,C.el,E.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Smoothed with</span>${seg('f',[['mean','Mean'],['median','Median'],['gauss','Gaussian']],'gauss')}<span class="ctl-label">Window</span>${seg('k',[[3,'3'],[5,'5'],[7,'7'],[9,'9']],7)}</div>`);
+  const ctl2=el(`<div class="controls">${slider('am','Sharpening amount',0,500,200,10,'%')}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const tw=el('<div class="scroll"></div>');
+  const note=el(`<div class="callout"><p><b>Short answer: no, not completely.</b> Smoothing throws information away, and sharpening can only guess it back.</p>
+    <p style="margin-top:8px"><b>Many inputs, one output.</b> The output of a mean or median is a single number computed from many. Different neighbourhoods can give the same number, so from the output alone you cannot tell which one it came from. That is the definition of information lost.</p>
+    <p style="margin-top:8px"><b>What sharpening does.</b> It boosts the edges that are still there. It makes the picture <i>look</i> crisper, but it cannot recreate detail that was averaged away, and it also boosts any noise.</p>
+    <p style="margin-top:8px"><b>Median:</b> cannot be reversed at all; the values it discards are simply gone.<br><b>Mean and Gaussian:</b> in theory a known blur can be divided out in the frequency domain (deconvolution). In practice the finest details were reduced to almost nothing, the 8-bit rounding and any noise then swamp them, and dividing them back up amplifies that error. Methods like Wiener filtering and Richardson-Lucy give a good estimate, not a perfect copy.</p>
+    <p style="margin-top:8px"><b>Practical rule:</b> keep the original and smooth a copy.</p></div>`);
+  const ex=el('<div class="readout" aria-live="polite"></div>');
+  root.append(el('<h2>Can we get the information back after smoothing?</h2>'),el('<p class="explain">Smooth the picture, then try to undo it with sharpening. Turn the amount up and down and compare the result with the original, and look at the error picture.</p>'),ctl,ctl2,cards,info,tw,el('<h3>Why it cannot be undone</h3>'),ex,note);
+  bindSeg(root,'f',v=>{f=v;render();});bindSeg(root,'k',v=>{k=+v;render();});bindSlider(root,'am',v=>{am=v/100;render();},'%');
+  function render(){
+    const src=App.base,sm=f==='mean'?meanF(src,k):f==='median'?medianF(src,k):toU8(gaussF(src,Math.max(0.5,(k-1)/6),k));
+    const {detail}=blurDetail(sm,Math.max(0.5,(k-1)/6)),rs=addDetail(sm,detail,am);
+    const err=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)err[i]=Math.min(255,Math.abs(rs[i]-src[i])*4);
+    paintG(A,src);paintG(B,sm);paintG(C,rs);paintG(E,err);
+    E.cap.textContent='Brighter = bigger difference (shown 4 times stronger)';C.cap.textContent=`${Math.round(am*100)}% of the detail added back`;
+    const p0=psnr(sm,src),p1=psnr(rs,src);
+    tw.innerHTML=`<table class="t"><thead><tr><th>Compared with the original</th><th class="num">PSNR (dB)</th><th class="num">Edge strength</th></tr></thead><tbody><tr><td>Original</td><td class="num">∞</td><td class="num">${edgeStrength(src).toFixed(1)}</td></tr><tr><td>Smoothed</td><td class="num">${fmtP(p0)}</td><td class="num">${edgeStrength(sm).toFixed(1)}</td></tr><tr><td>After sharpening</td><td class="num">${fmtP(p1)}</td><td class="num">${edgeStrength(rs).toFixed(1)}</td></tr></tbody></table>`;
+    info.innerHTML=p1>p0+0.05?`Sharpening moved the picture <b>closer</b> to the original (${fmtP(p0)} → ${fmtP(p1)} dB), but it is still not equal to it. The error picture shows what is missing.`:`Sharpening did <b>not</b> get closer to the original (${fmtP(p0)} → ${fmtP(p1)} dB). It can look crisper and still be further from the truth, because it adds detail in the wrong places.`;
+    const a=[[0,0,0],[0,90,0],[0,0,0]],b=[[10,10,10],[10,10,10],[10,10,10]],c=[[0,0,255],[1,2,9],[2,3,255]],d=[[0,1,2],[2,2,3],[255,255,255]];
+    const mean=x=>Math.round(x.flat().reduce((p,q)=>p+q,0)/9),med=x=>x.flat().sort((p,q)=>p-q)[4];
+    const tb=x=>`<table class="t" style="display:inline-table;margin:0 10px 0 0"><tbody>${x.map(r=>'<tr>'+r.map(v=>`<td class="num">${v}</td>`).join('')+'</tr>').join('')}</tbody></table>`;
+    ex.innerHTML=`<p style="margin:0 0 6px"><b>Mean:</b> these two very different 3 × 3 patches both give <b>${mean(a)}</b>.</p><div class="scroll">${tb(a)}${tb(b)}</div><p style="margin:10px 0 6px"><b>Median:</b> these two patches both give <b>${med(c)}</b>, even though both hold two bright pixels and different neighbours.</p><div class="scroll">${tb(c)}${tb(d)}</div><p class="note" style="margin:8px 0 0">Given only the output number you cannot tell which patch it came from.</p>`;
+  }
+  return {update:render,stop(){}};
+}
+
+initApp([{short:"How a filter works",build:viewHow},{short:"Mean, median, Gaussian",build:viewMMG},{short:"Gaussian σ",build:viewSigma},{short:"Sharpening",build:viewSharp},{short:"Smooth vs sharpen",build:viewVs},{short:"Can it be undone?",build:viewBack}],'landscape');
+</script>

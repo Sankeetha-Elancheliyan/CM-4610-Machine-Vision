@@ -1,0 +1,919 @@
+<title>Edge Detection Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, step tabs, then a stage of cards. Blue always means the input or original, orange the output or result, rose outline the thing you are pointing at. */
+:root{
+  --bg:#F3F4F7;--surface:#FFFFFF;--ink:#111827;--muted:#566074;--line:#CFD5E0;
+  --accent:#C2185B;--in:#2A58C8;--out:#C4510C;--ok:#1E8A4C;--bad:#C62828;--tone:var(--ink);
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+    --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+  --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.25;margin:22px 0 6px}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--ink)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"],button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 11%,var(--surface));border-color:var(--ink);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px;image-rendering:pixelated}
+.card canvas.pick{cursor:crosshair}
+.card canvas.chart{aspect-ratio:1;background:var(--surface);image-rendering:auto}
+.card canvas.wide{aspect-ratio:512/170;background:var(--surface);image-rendering:auto}
+.card canvas.rulers{aspect-ratio:720/250;background:var(--surface);image-rendering:auto}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.controls[hidden]{display:none}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--ink)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b,.mono{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:72ch}
+.formula{font-family:var(--font-mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;overflow-x:auto;white-space:nowrap}
+.callout{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:8px;padding:12px 14px;margin:0 0 16px;max-width:72ch}
+.callout p{margin:0}
+.callout .mono{font-size:14px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+table.t tr[hidden]{display:none}
+table.t tr.cur td{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.q p{margin:0}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);align-self:flex-start}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ans input[type=text],table.sum input{height:36px;font:inherit;font-family:var(--font-mono);font-size:14px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.ans input[type=text]{width:130px}
+.fb{font-size:14px;min-height:20px}
+.fb.ok,.okc{color:var(--ok)}
+.fb.bad,.badc{color:var(--bad)}
+.sol{border-left:3px solid var(--line);padding:2px 0 2px 12px;font-size:14px;color:var(--muted)}
+.sol p{margin:2px 0}
+.sol[hidden]{display:none}
+.opts{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opts button{text-align:left}
+.opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.score{font-family:var(--font-mono);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 14px;padding:0;list-style:none}
+.facts li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts li b{display:block;font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+.facts li span{color:var(--muted)}
+.code{position:relative;margin:0 0 14px}
+.code pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.55}
+.code button{position:absolute;top:8px;right:8px;min-height:30px;padding:3px 10px;font-size:12px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Machine vision · edge detection</p>
+    <h1>Edge detection lab</h1>
+    <p class="lede">Simple difference, Roberts, Sobel, Canny, Laplacian and LoG: which are first derivative, how thresholding works in each, and which one to choose.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-v="shapes" aria-pressed="false">Shapes</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">Stored as 128 × 128 gray pixels. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const S=128,SS=S*S;
+function clamp8(v){return v<0?0:v>255?255:v;}
+function histo(a){const h=new Uint32Array(256);for(let i=0;i<a.length;i++)h[a[i]]++;return h;}
+function minMax(a){let mn=255,mx=0;for(let i=0;i<a.length;i++){if(a[i]<mn)mn=a[i];if(a[i]>mx)mx=a[i];}return [mn,mx];}
+function cumul(h){const c=new Float64Array(h.length);let s=0;for(let i=0;i<h.length;i++){s+=h[i];c[i]=s;}return c;}
+function stretchRaw(v,imin,imax,omin,omax){return (v-imin)/(imax-imin)*(omax-omin)+omin;}
+function stretch8(v,imin,imax){return clamp8(Math.round(stretchRaw(v,imin,imax,0,255)));}
+function pctLimits(h,n,p){
+  const c=cumul(h);let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(c[v]>p*n){lo=v;break;}}
+  for(let v=255;v>=0;v--){const above=n-(v>0?c[v-1]:0);if(above>p*n){hi=v;break;}}
+  return [lo,hi];
+}
+function peakLimits(h,f){
+  let mx=0;for(let i=0;i<256;i++)if(h[i]>mx)mx=h[i];
+  const thr=f*mx;let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(h[v]>thr){lo=v;break;}}
+  for(let v=255;v>=0;v--){if(h[v]>thr){hi=v;break;}}
+  return [lo,hi,thr];
+}
+function eqLUT(h,n,mode){
+  const L=h.length,lut=new Array(L);let s=0;
+  for(let k=0;k<L;k++){s+=h[k];const x=(L-1)*s/n;lut[k]=mode==='floor'?Math.floor(x+1e-9):Math.round(x);}
+  return lut;
+}
+function eqLUTcv(h,n){
+  const lut=new Array(256).fill(0);let i=0;
+  while(i<256&&h[i]===0)i++;
+  if(i===256)return lut;
+  if(h[i]===n)return lut.fill(i);
+  const scale=255/(n-h[i]);let sum=0;lut[i]=0;i++;
+  for(;i<256;i++){sum+=h[i];lut[i]=Math.round(sum*scale);}
+  return lut;
+}
+function applyLUT(a,lut){const o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++)o[i]=lut[a[i]];return o;}
+function gammaV(v,g){return Math.round(255*Math.pow(v/255,g));}
+function linV(v,k,b){return clamp8(Math.round((v-128)*k+128+b));}
+function sCurveV(v,k){const x=v/255-0.5;return clamp8(Math.round(255*(Math.tanh(k*x)/(2*Math.tanh(k/2))+0.5)));}
+function meanStd(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];const m=s/a.length;let q=0;for(let i=0;i<a.length;i++){const d=a[i]-m;q+=d*d;}return [m,Math.sqrt(q/a.length)];}
+function levelsUsed(h){let c=0;for(let i=0;i<h.length;i++)if(h[i])c++;return c;}
+function lcg(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function makeDull(base,c,shift){
+  const lo=(255-255*c)/2,o=new Uint8ClampedArray(base.length);
+  for(let i=0;i<base.length;i++)o[i]=clamp8(Math.round(lo+base[i]*c+shift));
+  return o;
+}
+function addOutliers(a){
+  const o=Uint8ClampedArray.from(a);
+  for(let k=0;k<16;k++){const i=(k*2711+97)%a.length;o[i]=k%2?0:255;}
+  return o;
+}
+//CORE-END
+
+const BIG=720;
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function fmt(n){return n.toLocaleString('en-US');}
+function num(x,d){const k=Math.pow(10,d==null?3:d);const r=Math.round(x*k)/k;return String(Object.is(r,-0)?0:r);}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${String(o[0])===String(cur)}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+  return g;
+}
+function slider(id,label,min,max,val,step,suffix){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}${suffix||''}</output></label>`;
+}
+function bindSlider(root,id,cb,suffix){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=num(v,2)+(suffix||'');};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(+s.value);},get:()=>+s.value,el:s};
+}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function cellAt(cv,e,n){
+  const r=cv.getBoundingClientRect();
+  let x=Math.floor((e.clientX-r.left)/r.width*n),y=Math.floor((e.clientY-r.top)/r.height*n);
+  x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));
+  return {x,y};
+}
+function imgCard(label,extra,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" class="${extra||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(S,S),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function grayCard(card,arr){
+  const d=card.img.data;
+  for(let i=0;i<SS;i++){const o=i*4;d[o]=d[o+1]=d[o+2]=arr[i];d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function histCard(label,cap,w,h){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${w||512}" height="${h||170}" class="wide" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function chartCard(label,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="300" height="300" class="chart" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function histDraw(cv,h,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=16,pt=8;
+  const cMain=css(o.color||'--in'),cLine=css('--line'),cMut=css('--muted'),cAcc=css('--accent');
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  let mx=o.max||1;if(!o.max){for(let i=0;i<h.length;i++)if(h[i]>mx)mx=h[i];}
+  const bw=W/h.length,ph=H-pb-pt;
+  for(let i=0;i<h.length;i++){
+    const hh=h[i]/mx*ph;
+    g.fillStyle=(o.shade!=null&&i>o.shade)?cLine:cMain;
+    g.fillRect(i*bw,H-pb-hh,bw+0.5,hh);
+  }
+  g.fillStyle=cMut;g.fillRect(0,H-pb,W,1);
+  g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  [0,64,128,192,255].forEach(v=>{const x=(v+0.5)*W/256;g.fillRect(x,H-pb,1,4);g.textAlign=v===0?'left':v===255?'right':'center';g.fillText(String(v),v===0?1:v===255?W-1:x,H-3);});
+  if(o.cdf){
+    const c=cumul(h),tot=c[c.length-1]||1;g.strokeStyle=css('--ok');g.lineWidth=2;g.beginPath();
+    for(let i=0;i<h.length;i++){const x=(i+0.5)*bw,y=H-pb-c[i]/tot*ph;if(i===0)g.moveTo(x,y);else g.lineTo(x,y);}
+    g.stroke();
+  }
+  if(o.hline!=null){
+    const y=H-pb-o.hline/mx*ph;g.strokeStyle=cAcc;g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.setLineDash([]);
+  }
+  (o.markers||[]).forEach(m=>{
+    const x=(m.x+0.5)*bw;g.strokeStyle=m.color||cAcc;g.lineWidth=2;g.beginPath();g.moveTo(x,pt-4);g.lineTo(x,H-pb);g.stroke();
+    if(m.label){g.fillStyle=m.color||cAcc;g.textAlign=m.x>200?'right':'left';g.fillText(m.label,x+(m.x>200?-4:4),pt+6);}
+  });
+}
+function mapDraw(cv,series,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pl=30,pr=10,pt=10,pb=26;
+  const xd=o.xdom||[0,255],yd=o.ydom||[0,255];
+  const fx=x=>pl+(x-xd[0])/(xd[1]-xd[0])*(W-pl-pr),fy=y=>H-pb-(y-yd[0])/(yd[1]-yd[0])*(H-pb-pt);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  const D=o.div||4,ks=Array.from({length:D+1},(_,i)=>i);
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();
+  ks.forEach(k=>{const x=pl+k*(W-pl-pr)/D,y=pt+k*(H-pt-pb)/D;g.moveTo(x,pt);g.lineTo(x,H-pb);g.moveTo(pl,y);g.lineTo(W-pr,y);});
+  g.stroke();
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  g.textAlign='center';ks.forEach(k=>{const v=xd[0]+k*(xd[1]-xd[0])/D;g.fillText(num(v,xd[1]-xd[0]>=20?0:2),pl+k*(W-pl-pr)/D,H-12);});
+  g.textAlign='right';ks.forEach(k=>{const v=yd[0]+k*(yd[1]-yd[0])/D;g.fillText(num(v,yd[1]-yd[0]>=20?0:2),pl-4,H-pb-k*(H-pt-pb)/D+4);});
+  g.textAlign='right';g.fillText(o.xl||'input →',W-pr,H-1);g.textAlign='left';g.fillText(o.yl||'output ↑',pl+4,pt+9);
+  if(!o.nodiag&&xd[0]===yd[0]&&xd[1]===yd[1]){
+    g.setLineDash([4,4]);g.strokeStyle=css('--muted');g.lineWidth=1;g.beginPath();g.moveTo(fx(xd[0]),fy(yd[0]));g.lineTo(fx(xd[1]),fy(yd[1]));g.stroke();g.setLineDash([]);
+  }
+  series.forEach(s=>{
+    const pts=s.pts||Array.from(s.lut,(y,x)=>[x,y]);
+    g.strokeStyle=s.color?css(s.color):css('--ink');g.lineWidth=s.w||2.5;
+    g.setLineDash(s.dash||[]);g.beginPath();
+    if(!s.dots){pts.forEach((p,i)=>{const x=fx(p[0]),y=fy(p[1]);if(i===0)g.moveTo(x,y);else g.lineTo(x,y);});g.stroke();}
+    g.setLineDash([]);
+    if(s.dots){g.fillStyle=s.color?css(s.color):css('--ink');pts.forEach(p=>{g.beginPath();g.arc(fx(p[0]),fy(p[1]),4,0,2*Math.PI);g.fill();});}
+  });
+  (o.vlines||[]).forEach(x=>{g.strokeStyle=css('--accent');g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(fx(x),pt);g.lineTo(fx(x),H-pb);g.stroke();g.setLineDash([]);});
+  (o.points||[]).forEach(p=>{
+    g.fillStyle=css(p.color||'--accent');g.beginPath();g.arc(fx(p.x),fy(p.y),p.r||6,0,2*Math.PI);g.fill();
+    g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+  });
+}
+function codeBlock(getText){
+  const w=el('<div class="code"><pre></pre><button type="button">Copy</button></div>');
+  const pre=w.querySelector('pre'),btn=w.querySelector('button');
+  function refresh(){pre.textContent=getText();}
+  btn.addEventListener('click',async()=>{
+    const t=pre.textContent;let done=false;
+    try{await navigator.clipboard.writeText(t);done=true;btn.textContent='Copied';}catch(e){}
+    if(!done){
+      try{const r=document.createRange();r.selectNodeContents(pre);const s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';}catch(e){btn.textContent='Select text';}
+    }
+    setTimeout(()=>{btn.textContent='Copy';},1600);
+  });
+  refresh();
+  return {el:w,refresh};
+}
+function statsLine(a){
+  const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);
+  return `mean <b>${m.toFixed(0)}</b> · spread (std) <b>${sd.toFixed(0)}</b> · range <b>${mn}</b> to <b>${mx}</b>`;
+}
+
+/* ---------- images ---------- */
+let LAST_RGBA=null;
+function noisyGray(rgba,seed,amp){
+  const g=new Uint8ClampedArray(SS),r=lcg(seed);
+  for(let i=0;i<SS;i++){
+    const v=0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]+(r()+r()-1)*amp;
+    g[i]=Math.round(v<0?0:v>255?255:v);
+  }
+  return g;
+}
+function sceneLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  g.scale(0.5,0.5);
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,256,256);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,256,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,256,1);
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,11,6);
+}
+function sceneShapes(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,S);bg.addColorStop(0,'#141a22');bg.addColorStop(1,'#2a3340');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  g.fillStyle='#8c97a8';g.fillRect(14,70,40,40);g.fillRect(76,18,36,30);g.fillRect(70,84,44,30);
+  g.fillStyle='#ebe6d4';
+  [[34,34,16],[98,70,11],[40,92,9],[104,104,8]].forEach(a=>{g.beginPath();g.arc(a[0],a[1],a[2],0,2*Math.PI);g.fill();});
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,23,8);
+}
+function sceneCoins(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,S,S);bg.addColorStop(0,'#f4f1ea');bg.addColorStop(1,'#e4dfd3');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  const coin=(x,y,r,a,b)=>{
+    const rg=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);rg.addColorStop(0,a);rg.addColorStop(1,b);
+    g.fillStyle=rg;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1.2;g.beginPath();g.arc(x,y,r*0.72,0,2*Math.PI);g.stroke();
+  };
+  const GOLD=['#c99a24','#85620c'],COP=['#b8714a','#7a3f20'],SIL=['#a2adb8','#5f6a76'];
+  [[24,26,15,GOLD],[51,24,13,SIL],[92,28,14,COP],[113,34,10,GOLD],[30,66,12,COP],[60,70,16,GOLD],[94,72,12,SIL],[22,104,11,SIL],[52,102,13,GOLD],[84,104,15,COP],[107,99,9,SIL]].forEach(k=>coin(k[0],k[1],k[2],k[3][0],k[3][1]));
+  const id=g.getImageData(0,0,S,S).data,r=lcg(31),o=new Uint8ClampedArray(SS*4),gr=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const n=(r()+r()-1)*6;
+    for(let k=0;k<3;k++)o[i*4+k]=Math.round(Math.max(0,Math.min(255,id[i*4+k]+n)));
+    o[i*4+3]=255;
+    gr[i]=Math.round(0.299*o[i*4]+0.587*o[i*4+1]+0.114*o[i*4+2]);
+  }
+  LAST_RGBA=o;
+  return gr;
+}
+
+/* ---------- app frame ---------- */
+const App={base:null,name:'Landscape',views:[],panels:[],cur:0,steps:[]};
+function setBase(gray,name,rgba){App.base=gray;App.name=name;if(rgba)App.rgba=rgba;const v=App.views[App.cur];if(v)v.update();}
+const SCENES={landscape:['Landscape',()=>sceneLandscape()],shapes:['Shapes',()=>sceneShapes()],coins:['Coins',()=>sceneCoins()]};
+function initApp(steps,start){
+  App.steps=steps;start=start||'landscape';
+  const stage=$('#stage'),nav=$('#steps');
+  steps.forEach((s,i)=>{
+    const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+    b.addEventListener('click',()=>go(i));
+    nav.appendChild(b);
+    const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);App.panels.push(p);App.views.push(null);
+  });
+  function go(i){
+    const old=App.views[App.cur];if(old&&old.stop)old.stop();
+    App.cur=i;
+    App.panels.forEach((p,j)=>{p.hidden=j!==i;});
+    nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+    if(!App.views[i])App.views[i]=steps[i].build(App.panels[i]);
+    App.views[i].update();
+    $('#back').hidden=i===0;
+    $('#next').textContent=i===steps.length-1?'Start again':'Next';
+  }
+  $('#back').addEventListener('click',()=>go(Math.max(0,App.cur-1)));
+  $('#next').addEventListener('click',()=>go(App.cur===steps.length-1?0:App.cur+1));
+  const srcBtns=[...document.querySelectorAll('#src button')];
+  const setSource=v=>srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  const msg=$('#srcmsg'),DEF='Stored as 128 × 128 gray pixels. Everything runs in your browser.';
+  $('#src').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    const v=b.dataset.v;
+    if(SCENES[v]){setSource(v);msg.textContent=DEF;const gr=SCENES[v][1]();setBase(gr,SCENES[v][0],LAST_RGBA);}
+    else{$('#file').click();}
+  });
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+        const s=Math.min(im.width,im.height);
+        g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        const d=g.getImageData(0,0,S,S).data,gr=new Uint8ClampedArray(SS);
+        for(let i=0;i<SS;i++)gr[i]=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+        setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 128 × 128.';
+        setBase(gr,f.name,Uint8ClampedArray.from(d));
+      };
+      im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+      im.src=r.result;
+    };
+    r.onerror=()=>{msg.textContent='That file could not be read.';};
+    r.readAsDataURL(f);
+    e.target.value='';
+  });
+  if(window.matchMedia){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const rr=()=>{const v=App.views[App.cur];if(v)v.update();};
+    if(mq.addEventListener)mq.addEventListener('change',rr);
+  }
+  App.base=SCENES[start][1]();App.rgba=LAST_RGBA;
+  go(0);
+  App.go=go;
+}
+
+//ED-CORE-START
+function refl(i,n){while(i<0||i>=n){if(i<0)i=-i;if(i>=n)i=2*n-2-i;}return i;}
+function repl(i,n){return i<0?0:i>=n?n-1:i;}
+function gaussW(sigma,k){const r=(k-1)/2,w=[];let s=0;for(let i=0;i<k;i++){const v=Math.exp(-((i-r)*(i-r))/(2*sigma*sigma));w.push(v);s+=v;}return w.map(v=>v/s);}
+function autoSize(sigma){return Math.min(51,2*Math.ceil(3*sigma)+1);}
+function sepG(a,sigma,W,H){
+  W=W||S;H=H||S;
+  if(!(sigma>0.05))return Float32Array.from(a);
+  const w=gaussW(sigma,autoSize(sigma)),r=(w.length-1)>>1,t=new Float32Array(W*H),o=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s=0;for(let k=0;k<w.length;k++)s+=w[k]*a[y*W+refl(x+k-r,W)];t[y*W+x]=s;}
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s=0;for(let k=0;k<w.length;k++)s+=w[k]*t[refl(y+k-r,H)*W+x];o[y*W+x]=s;}
+  return o;
+}
+function addGauss(a,sd,seed){const r=lcg(seed),o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++){const u=Math.max(r(),1e-9),v=r(),z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);o[i]=Math.round(a[i]+sd*z);}return o;}
+function sobelXY(a,W,H){
+  W=W||S;H=H||S;const gx=new Float32Array(W*H),gy=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const x0=refl(x-1,W),x1=refl(x+1,W),y0=refl(y-1,H),y1=refl(y+1,H);
+    const a00=a[y0*W+x0],a01=a[y0*W+x],a02=a[y0*W+x1],a10=a[y*W+x0],a12=a[y*W+x1],a20=a[y1*W+x0],a21=a[y1*W+x],a22=a[y1*W+x1];
+    gx[y*W+x]=(a02+2*a12+a22)-(a00+2*a10+a20);
+    gy[y*W+x]=(a20+2*a21+a22)-(a00+2*a01+a02);
+  }
+  return {gx,gy};
+}
+function diffXY(a,W,H){
+  W=W||S;H=H||S;const gx=new Float32Array(W*H),gy=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    gx[y*W+x]=a[y*W+repl(x+1,W)]-a[y*W+x];
+    gy[y*W+x]=a[repl(y+1,H)*W+x]-a[y*W+x];
+  }
+  return {gx,gy};
+}
+function robertsXY(a,W,H){
+  W=W||S;H=H||S;const gx=new Float32Array(W*H),gy=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const x1=repl(x+1,W),y1=repl(y+1,H);
+    gx[y*W+x]=a[y*W+x]-a[y1*W+x1];
+    gy[y*W+x]=a[y*W+x1]-a[y1*W+x];
+  }
+  return {gx,gy};
+}
+function magOf(gx,gy){const m=new Float32Array(gx.length);for(let i=0;i<m.length;i++)m[i]=Math.sqrt(gx[i]*gx[i]+gy[i]*gy[i]);return m;}
+function pct(f,p){const c=Float32Array.from(f).sort();return c[Math.max(0,Math.min(c.length-1,Math.floor(p/100*(c.length-1))))];}
+function normImg(f,hi){const o=new Uint8ClampedArray(f.length);const s=hi>0?255/hi:0;for(let i=0;i<f.length;i++)o[i]=Math.round(Math.min(255,Math.abs(f[i])*s));return o;}
+function laplacian(a,W,H){
+  W=W||S;H=H||S;const o=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    o[y*W+x]=a[refl(y-1,H)*W+x]+a[refl(y+1,H)*W+x]+a[y*W+refl(x-1,W)]+a[y*W+refl(x+1,W)]-4*a[y*W+x];
+  }
+  return o;
+}
+function zeroCross(L,t,W,H){
+  W=W||S;H=H||S;const o=new Uint8Array(W*H);
+  const nb=[[1,0],[0,1],[1,1],[-1,1]];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const p=y*W+x,v=L[p];
+    for(const d of nb){
+      const xx=x+d[0],yy=y+d[1];if(xx<0||xx>=W||yy>=H)continue;
+      const q=yy*W+xx,u=L[q];
+      if(((v<0&&u>0)||(v>0&&u<0))&&Math.abs(v-u)>t){o[Math.abs(v)<=Math.abs(u)?p:q]=1;}
+    }
+  }
+  return o;
+}
+function cannyRun(a,sigma,lo,hi,W,H){
+  W=W||S;H=H||S;
+  const blur=sepG(a,sigma,W,H),{gx,gy}=sobelXY(blur,W,H),mag=magOf(gx,gy),nms=new Float32Array(W*H);
+  const M=(x,y)=>x<0||y<0||x>=W||y>=H?0:mag[y*W+x];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const p=y*W+x,m=mag[p];if(m===0)continue;
+    let ang=Math.atan2(gy[p],gx[p])*180/Math.PI;if(ang<0)ang+=180;if(ang>=180)ang-=180;
+    let dx,dy;
+    if(ang<22.5||ang>=157.5){dx=1;dy=0;}else if(ang<67.5){dx=1;dy=1;}else if(ang<112.5){dx=0;dy=1;}else{dx=1;dy=-1;}
+    if(m>M(x+dx,y+dy)&&m>=M(x-dx,y-dy))nms[p]=m;
+  }
+  const cls=new Uint8Array(W*H);
+  for(let i=0;i<cls.length;i++)cls[i]=nms[i]>=hi?2:nms[i]>lo?1:0;
+  const out=new Uint8Array(W*H),st=[];
+  for(let i=0;i<cls.length;i++)if(cls[i]===2){out[i]=1;st.push(i);}
+  while(st.length){
+    const p=st.pop(),x=p%W,y=(p/W)|0;
+    for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){
+      const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=W||yy>=H)continue;
+      const q=yy*W+xx;if(cls[q]===1&&!out[q]){out[q]=2;st.push(q);}
+    }
+  }
+  return {blur,gx,gy,mag,nms,cls,out};
+}
+//ED-CORE-END
+
+const NZ=[['none','Clean'],['gauss','Noisy']];
+let nzCache={base:null,m:null};
+function inputFor(nz){
+  if(nz==='none')return App.base;
+  if(nzCache.base!==App.base)nzCache={base:App.base,m:addGauss(App.base,10,3)};
+  return nzCache.m;
+}
+function paintG(card,a,row){
+  grayCard(card,a);
+  if(row!=null){card.ctx.globalAlpha=0.85;card.ctx.fillStyle=css('--accent');card.ctx.fillRect(0,row,S,1);card.ctx.globalAlpha=1;}
+}
+function paintMask(card,m,col){
+  const d=card.img.data,c=col||[255,255,255];
+  for(let i=0;i<SS;i++){const q=i*4,on=m[i];d[q]=on?c[0]:14;d[q+1]=on?c[1]:18;d[q+2]=on?c[2]:26;d[q+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function grid(w){return el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,${w}px),1fr))"></div>`);}
+function rowProfile(cv,series,row,hi){
+  mapDraw(cv,series.map(s=>({pts:Array.from({length:S},(_,x)=>[x,Math.min(255,Math.abs(s.a[row*S+x])/hi[series.indexOf(s)]*255)]),color:s.color,w:s.w||2})),{xdom:[0,S-1],ydom:[0,255],nodiag:true,xl:'column →',yl:'strength ↑'});
+}
+function swatches(items){return items.map(i=>`<span class="swatch" style="background:var(${i[0]})"></span>${i[1]}`).join(' <span style="display:inline-block;width:8px"></span>');}
+function countOn(m){let n=0;for(let i=0;i<m.length;i++)if(m[i])n++;return n;}
+
+/* ---------- 1 · Edges and derivatives ---------- */
+function viewIntro(root){
+  let kind='step',blur=1.5,nz=0;
+  const N=100;
+  const C1=histCard('Brightness along a line across the edge','',720,190),C2=histCard('First derivative: how fast brightness changes','',720,190),C3=histCard('Second derivative: how fast that rate changes','',720,190);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Edge</span>${seg('kind',[['step','Step edge'],['line','Thin bright line']],'step')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('bl','Edge softness (blur)',0,6,1.5,0.1)}${slider('nz','Noise',0,12,0,0.5)}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const fam=el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))">
+    <div class="callout" style="margin:0"><p><b>First derivative methods</b> look for the <b>peak</b> of the change. They produce a gradient: how strong the edge is, and which way it points.</p><p style="margin-top:8px">Simple difference · Roberts cross · Sobel. Canny is built on top of Sobel, so it is a first derivative method too.</p></div>
+    <div class="callout" style="margin:0"><p><b>Second derivative methods</b> look for where the change of the change <b>crosses zero</b>. They give a thin edge location but no direction, and they react more to noise.</p><p style="margin-top:8px">Laplacian · Laplacian of Gaussian (LoG, also called Marr-Hildreth).</p></div></div>`);
+  root.append(el('<h2>What is an edge, and what has a derivative got to do with it?</h2>'),el('<p class="explain">An edge is a place where brightness changes quickly. Take one line of pixels across an edge and plot it. The <b>first derivative</b> is the slope of that curve, so it peaks at the edge. The <b>second derivative</b> is the slope of the slope, so it swings positive then negative and crosses zero exactly at the edge. Every method in this tutorial is one of these two ideas. Soften the edge and add noise and watch what each derivative does.</p>'),ctl,ctl2,C1.el,C2.el,C3.el,info,fam);
+  bindSeg(root,'kind',v=>{kind=v;render();});bindSlider(root,'bl',v=>{blur=v;render();});bindSlider(root,'nz',v=>{nz=v;render();});
+  function render(){
+    const f=new Float32Array(N),raw=new Float32Array(N);
+    for(let i=0;i<N;i++)raw[i]=kind==='step'?(i<50?70:190):(Math.abs(i-50)<=1?200:80);
+    const r=Math.ceil(3*blur),w=blur>0.05?gaussW(blur,2*r+1):[1];
+    const rr=(w.length-1)>>1,rnd=lcg(7);
+    for(let i=0;i<N;i++){let s=0;for(let k=0;k<w.length;k++)s+=w[k]*raw[repl(i+k-rr,N)];const u=Math.max(rnd(),1e-9),v=rnd();f[i]=s+nz*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+    const d1=new Float32Array(N),d2=new Float32Array(N);
+    for(let i=1;i<N-1;i++){d1[i]=(f[i+1]-f[i-1])/2;d2[i]=f[i+1]-2*f[i]+f[i-1];}
+    let pk=1,pm=0;for(let i=1;i<N-1;i++)if(Math.abs(d1[i])>pm){pm=Math.abs(d1[i]);pk=i;}
+    const zc=[];for(let i=2;i<N-2;i++){if((d2[i]<0&&d2[i+1]>0)||(d2[i]>0&&d2[i+1]<0)){if(Math.abs(d2[i]-d2[i+1])>1)zc.push(i+(Math.abs(d2[i])/(Math.abs(d2[i])+Math.abs(d2[i+1]))));}}
+    const ext=a=>{let m=10;for(let i=0;i<a.length;i++)m=Math.max(m,Math.abs(a[i]));return Math.ceil(m/10)*10;};
+    const pts=a=>Array.from(a,(v,i)=>[i,v]);
+    mapDraw(C1.cv,[{pts:pts(f),color:'--in',w:2.5}],{xdom:[0,N-1],ydom:[0,255],nodiag:true,xl:'position →',yl:'brightness ↑'});
+    const e1=ext(d1),e2=ext(d2);
+    mapDraw(C2.cv,[{pts:pts(d1),color:'--out',w:2.5}],{xdom:[0,N-1],ydom:[-e1,e1],nodiag:true,vlines:[pk],xl:'position →',yl:'slope ↑'});
+    mapDraw(C3.cv,[{pts:pts(d2),color:'--ok',w:2.5}],{xdom:[0,N-1],ydom:[-e2,e2],nodiag:true,vlines:zc.slice(0,40),xl:'position →',yl:'change of slope ↑'});
+    C1.cap.textContent=kind==='step'?'A step from dark to bright. Blur makes the step a ramp.':'A thin bright line on a dark background.';
+    C2.cap.innerHTML=`The pink line marks the biggest swing (position <b>${pk}</b>). <b>First derivative: edge = peak.</b> For a bright line it gives one positive and one negative peak, one for each side.`;
+    C3.cap.innerHTML=`Pink lines mark every place the curve crosses zero (<b>${zc.length}</b> found). <b>Second derivative: edge = zero crossing.</b>`;
+    info.innerHTML=nz===0?'With no noise the first derivative has a clear peak and the second derivative crosses zero exactly once per edge. Now raise the noise.':`With noise the second derivative has <b>${zc.length}</b> zero crossings, almost all false. The first derivative also wiggles but the real peak still stands out. <b>Each derivative magnifies noise, and the second one magnifies it more.</b> That is why smoothing comes first in Canny and in LoG.`;
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 2 · Do the sums ---------- */
+function viewSums(root){
+  const TUT=[[150,160,170],[145,155,165],[140,150,160]];
+  let M=TUT.map(r=>r.slice()),hide=true;
+  const rnd=lcg(Date.now()&0xffff);
+  const grid3=el('<div></div>');
+  const ctl=el('<div class="controls"><button type="button" id="tut" class="primary">Tutorial matrix</button><button type="button" id="rnd">Random matrix</button><button type="button" id="hd" class="tog" aria-pressed="true">Hide answers so I can try first</button></div>');
+  const host=el('<div></div>');
+  root.append(el('<h2>Work it out by hand: the lab sheet</h2>'),el('<p class="explain">Find the gradients and the gradient magnitude at the <b>central pixel (row 1, column 1)</b>, using each operator. Image x runs to the right and y runs down. Highlighted cells show which pixels each operator reads. Fill in your answers and press Check. The sign of a gradient depends on the convention, so the check accepts either sign.</p>'),ctl,grid3,host);
+  $('#tut',root).addEventListener('click',()=>{M=TUT.map(r=>r.slice());build();});
+  $('#rnd',root).addEventListener('click',()=>{M=Array.from({length:3},()=>Array.from({length:3},()=>10*Math.round(8+rnd()*12)));build();});
+  const hb=$('#hd',root);hb.addEventListener('click',()=>{hide=!hide;hb.setAttribute('aria-pressed',String(hide));build();});
+  const f2=x=>String(Math.round(x*100)/100);
+  function matrixTable(used){
+    let h='<table class="t" style="width:auto"><tbody>';
+    for(let r=0;r<3;r++){h+='<tr>';for(let c=0;c<3;c++){const u=used&&used.some(p=>p[0]===r&&p[1]===c);h+=`<td class="num" style="${u?'background:color-mix(in srgb,var(--accent) 20%,var(--surface));font-weight:600':'color:var(--muted)'}">${M[r][c]}</td>`;}h+='</tr>';}
+    return h+'</tbody></table>';
+  }
+  function ops(){
+    const I=M;
+    const dgx=I[1][2]-I[1][1],dgy=I[2][1]-I[1][1];
+    const rgx=I[1][1]-I[2][2],rgy=I[1][2]-I[2][1];
+    const sgx=(I[0][2]+2*I[1][2]+I[2][2])-(I[0][0]+2*I[1][0]+I[2][0]);
+    const sgy=(I[2][0]+2*I[2][1]+I[2][2])-(I[0][0]+2*I[0][1]+I[0][2]);
+    return [
+      {id:'d',name:'1 · Simple difference',used:[[1,1],[1,2],[2,1]],kern:'Gx = I(1,2) − I(1,1)<br>Gy = I(2,1) − I(1,1)',gx:dgx,gy:dgy,
+       work:`Gx = ${I[1][2]} − ${I[1][1]} = <b>${dgx}</b><br>Gy = ${I[2][1]} − ${I[1][1]} = <b>${dgy}</b>`},
+      {id:'r',name:"2 · Roberts' cross",used:[[1,1],[1,2],[2,1],[2,2]],kern:'Gx = I(1,1) − I(2,2)<br>Gy = I(1,2) − I(2,1)',gx:rgx,gy:rgy,
+       work:`Gx = ${I[1][1]} − ${I[2][2]} = <b>${rgx}</b><br>Gy = ${I[1][2]} − ${I[2][1]} = <b>${rgy}</b>`},
+      {id:'s',name:'3 · Sobel',used:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],kern:'Gx = (right column, centre row × 2) − (left column, centre row × 2)<br>Gy = (bottom row, centre column × 2) − (top row, centre column × 2)',gx:sgx,gy:sgy,
+       work:`Gx = (${I[0][2]} + 2×${I[1][2]} + ${I[2][2]}) − (${I[0][0]} + 2×${I[1][0]} + ${I[2][0]}) = ${I[0][2]+2*I[1][2]+I[2][2]} − ${I[0][0]+2*I[1][0]+I[2][0]} = <b>${sgx}</b><br>Gy = (${I[2][0]} + 2×${I[2][1]} + ${I[2][2]}) − (${I[0][0]} + 2×${I[0][1]} + ${I[0][2]}) = ${I[2][0]+2*I[2][1]+I[2][2]} − ${I[0][0]+2*I[0][1]+I[0][2]} = <b>${sgy}</b>`}
+    ].map(o=>{o.mag=Math.hypot(o.gx,o.gy);o.ang=Math.atan2(o.gy,o.gx)*180/Math.PI;return o;});
+  }
+  function build(){
+    grid3.innerHTML='<p class="cl" style="margin:0 0 6px">Image I (row, column)</p>'+matrixTable(null);
+    const list=ops();host.innerHTML='';
+    list.forEach(o=>{
+      const card=el(`<div class="card" style="margin:0 0 14px;gap:10px"><p class="cl" style="margin:0">${o.name}</p><div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));margin:0"><div>${matrixTable(o.used)}</div><div class="note" style="margin:0">${o.kern}</div></div><div class="ans"></div><div class="fb" aria-live="polite"></div><div class="sol" ${hide?'hidden':''}><p class="mono">${o.work}</p><p class="mono">|G| = √(${o.gx}² + ${o.gy}²) = <b>${f2(o.mag)}</b> · direction = atan2(Gy, Gx) = <b>${f2(o.ang)}°</b></p></div></div>`);
+      const ans=card.querySelector('.ans'),fb=card.querySelector('.fb'),sol=card.querySelector('.sol');
+      const mk=(l)=>{const i=el(`<input type="text" inputmode="decimal" size="6" style="width:88px" placeholder="${l}" aria-label="${l} for ${o.name}">`);return i;};
+      const ix=mk('Gx'),iy=mk('Gy'),im=mk('|G|');
+      const chk=el('<button type="button" class="primary">Check</button>'),sh=el('<button type="button">Show answer</button>');
+      ans.append(ix,iy,im,chk,sh);
+      const pv=i=>{const t=i.value.trim().replace(',','.');return /^-?\d*\.?\d+$/.test(t)?parseFloat(t):NaN;};
+      const near=(v,e,t)=>!isNaN(v)&&Math.abs(Math.abs(v)-Math.abs(e))<=t;
+      chk.addEventListener('click',()=>{
+        const r=[near(pv(ix),o.gx,0.01),near(pv(iy),o.gy,0.01),near(pv(im),o.mag,0.06)];
+        [ix,iy,im].forEach((i,k)=>{i.style.borderColor=r[k]?'var(--ok)':'var(--bad)';});
+        const n=r.filter(Boolean).length;
+        fb.className='fb '+(n===3?'ok':'bad');fb.textContent=n===3?'All three correct.':`${n} of 3 correct. Check the red boxes.`;
+        if(n===3)sol.hidden=false;
+      });
+      sh.addEventListener('click',()=>{sol.hidden=!sol.hidden;});
+      host.appendChild(card);
+    });
+    const s=list[2];
+    host.appendChild(el(`<div class="callout"><p><b>Notice.</b> Sobel reads three times as many pixels, so its answer is about 8 times bigger (${s.gx} and ${s.gy}). Divide by 8 and you get <b>${f2(s.gx/8)}</b> and <b>${f2(s.gy/8)}</b>: the same slope per pixel as the simple difference when the image is a smooth ramp. What Sobel adds is <b>averaging across neighbouring rows and columns</b>, so a noisy pixel affects the answer far less. Roberts uses diagonal differences over only a 2 × 2 block, so its x and y point along the diagonals, not along the image axes.</p></div>`));
+  }
+  build();
+  return {update(){},stop(){}};
+}
+
+/* ---------- 3 · First-derivative operators ---------- */
+function viewFirst(root){
+  let nz='none',row=64,ang=30,nsd=8;
+  const A=imgCard('Input'),D=imgCard('Simple difference'),R=imgCard("Roberts' cross"),Sb=imgCard('Sobel');
+  const cards=grid(190);cards.append(A.el,D.el,R.el,Sb.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Input</span>${seg('nz',NZ,'none')}${slider('row','Profile row',2,125,64)}</div>`);
+  const P=histCard('Edge strength along the pink row (each scaled to its own brightest edge)','',720,230);
+  const tw=el('<div class="scroll"></div>');
+  const kern=el(`<div class="scroll"><table class="t"><thead><tr><th>Operator</th><th>Kernels (x and y)</th><th>Size</th><th>Reads</th></tr></thead><tbody>
+    <tr><td>Simple difference</td><td class="mono">[−1 1] and [−1 1]ᵀ</td><td>1 × 2</td><td>2 pixels per direction</td></tr>
+    <tr><td>Roberts' cross</td><td class="mono">[1 0; 0 −1] and [0 1; −1 0]</td><td>2 × 2</td><td>4 pixels, along the diagonals</td></tr>
+    <tr><td>Sobel</td><td class="mono">[−1 0 1; −2 0 2; −1 0 1] and its transpose</td><td>3 × 3</td><td>6 pixels per direction, centre row weighted double</td></tr></tbody></table></div>`);
+  const O1=el(`<div class="controls">${slider('ang','True edge angle',0,90,30,1,'°')}${slider('nsd','Noise',0,40,8)}</div>`);
+  const ot=el('<div class="scroll"></div>');
+  const props=el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">
+    <div class="callout" style="margin:0"><p><b>Simple difference.</b> Fastest and simplest. It subtracts one neighbour. It is noisy (one bad pixel ruins it), and it measures the slope between pixels, so the edge is placed half a pixel off.</p></div>
+    <div class="callout" style="margin:0"><p><b>Roberts' cross.</b> Two diagonal differences over a 2 × 2 block. Very cheap and gives sharp, thin responses, but with only four pixels it is very sensitive to noise, it is also half a pixel off, and its axes are the diagonals.</p></div>
+    <div class="callout" style="margin:0"><p><b>Sobel.</b> A 3 × 3 kernel that differentiates in one direction and <b>smooths in the other</b> (the 1, 2, 1 weights). Better noise behaviour, centred on the pixel, and a more accurate direction. The price is a slightly wider edge band on sharp edges.</p></div></div>`);
+  root.append(el('<h2>First-derivative operators</h2>'),el('<p class="explain">All three compute the gradient (Gx, Gy) and show its length, |G| = √(Gx² + Gy²). Bright means a strong edge. The differences are in the <b>size of the neighbourhood</b>, which decides noise sensitivity, edge thickness and direction accuracy.</p>'),ctl,cards,P.el,tw,el('<h3>The kernels</h3>'),kern,el('<h3>Which direction does the edge point?</h3>'),el('<p class="explain" style="margin-bottom:10px">Here is a synthetic edge at a known angle with some noise added. Each operator estimates the direction of the gradient, and the table shows the average error in degrees. Roberts is converted from its diagonal axes first.</p>'),O1,ot,props);
+  bindSeg(root,'nz',v=>{nz=v;render();});bindSlider(root,'row',v=>{row=v;render();});
+  bindSlider(root,'ang',v=>{ang=v;render();},'°');bindSlider(root,'nsd',v=>{nsd=v;renderO();});
+  function width(m,r){
+    let pk=0,pm=0;for(let x=0;x<S;x++)if(m[r*S+x]>pm){pm=m[r*S+x];pk=x;}
+    let a=pk,b=pk;while(a>0&&m[r*S+a-1]>=pm/2)a--;while(b<S-1&&m[r*S+b+1]>=pm/2)b++;
+    return {w:b-a+1,pk};
+  }
+  function render(){
+    const src=inputFor(nz),f=Float32Array.from(src);
+    const d=diffXY(f),ro=robertsXY(f),so=sobelXY(f);
+    const md=magOf(d.gx,d.gy),mr=magOf(ro.gx,ro.gy),ms=magOf(so.gx,so.gy);
+    const hs=[pct(md,99.5),pct(mr,99.5),pct(ms,99.5)];
+    paintG(A,src,row);paintG(D,normImg(md,hs[0]),row);paintG(R,normImg(mr,hs[1]),row);paintG(Sb,normImg(ms,hs[2]),row);
+    A.cap.textContent=nz==='none'?'':'Noise added';D.cap.textContent='2 pixels';R.cap.textContent='2 × 2 pixels';Sb.cap.textContent='3 × 3 pixels';
+    rowProfile(P.cv,[{a:md,color:'--muted',w:1.8},{a:mr,color:'--in',w:1.8},{a:ms,color:'--out',w:2.4}],row,hs);
+    P.cap.innerHTML=swatches([['--muted','simple difference'],['--in','Roberts'],['--out','Sobel']])+'. Wider hills mean thicker edges. Spiky lines mean noise.';
+    const wd=[width(md,row),width(mr,row),width(ms,row)];
+    tw.innerHTML=`<table class="t"><thead><tr><th>On this row</th><th class="num">Width of the strongest edge (pixels above half its peak)</th></tr></thead><tbody><tr><td>Simple difference</td><td class="num">${wd[0].w}</td></tr><tr><td>Roberts' cross</td><td class="num">${wd[1].w}</td></tr><tr><td>Sobel</td><td class="num">${wd[2].w}</td></tr></tbody></table><p class="note" style="margin:6px 0 0">On a sharp edge Sobel\u2019s band is about one pixel wider than the other two, because it reads a 3-pixel window. On a soft edge the edge itself sets the width and the three become similar. None of them gives a clean one-pixel line: Canny, on a later page, thins the band to one pixel.</p>`;
+    renderO();
+  }
+  function wrap(a){a=((a%360)+360)%360;return a>180?360-a:a;}
+  function renderO(){
+    const W=64,phi=ang*Math.PI/180,cx=Math.cos(phi),cy=Math.sin(phi),img=new Float32Array(W*W),dist=new Float32Array(W*W);
+    for(let y=0;y<W;y++)for(let x=0;x<W;x++){const dd=(x-31.5)*cx+(y-31.5)*cy;dist[y*W+x]=dd;img[y*W+x]=128+60*Math.tanh(dd/1.5);}
+    const nimg=addGauss(img,nsd,11);
+    const nf=Float32Array.from(nimg);
+    const ops=[['Simple difference',diffXY(nf,W,W),0],['Roberts’ cross',robertsXY(nf,W,W),1],['Sobel',sobelXY(nf,W,W),0]];
+    const rows=ops.map(o=>{
+      let s=0,n=0;
+      for(let y=3;y<W-3;y++)for(let x=3;x<W-3;x++){
+        if(Math.abs(dist[y*W+x])>1.5)continue;
+        const gx=o[1].gx[y*W+x],gy=o[1].gy[y*W+x];
+        let ex,ey;if(o[2]){ex=(gy-gx)/2;ey=-(gx+gy)/2;}else{ex=gx;ey=gy;}
+        const est=Math.atan2(ey,ex)*180/Math.PI;s+=wrap(est-ang);n++;
+      }
+      return [o[0],s/n];
+    });
+    ot.innerHTML=`<table class="t"><thead><tr><th>Estimating an edge at ${ang}°</th><th class="num">Mean direction error (°)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1].toFixed(1)}</td></tr>`).join('')}</tbody></table><p class="note" style="margin:6px 0 0">With no noise all three are close to exact on a smooth edge. Raise the noise and the 2-pixel and 2 × 2 operators drift much more than Sobel, because Sobel averages. The Roberts operator also sits on diagonal axes: its raw angle is 45° from the true angle until it is converted, which is easy to forget.</p>`;
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 4 · Thresholding ---------- */
+function viewThresh(root){
+  let nz='none',sm=0,T=25;
+  const G=imgCard('Sobel gradient'),B=imgCard('Edge pixels (above the threshold)');
+  const cards=grid(260);cards.append(G.el,B.el);
+  const H=histCard('How many pixels have each gradient strength','',720,190);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Input</span>${seg('nz',NZ,'none')}<span class="ctl-label">Smooth first</span>${seg('sm',[['0','No'],['1.2','Yes (σ = 1.2)']],'0')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('T','Threshold',0,100,25,1,'%')}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<div class="callout"><p></p></div>');
+  const glance=el(`<div class="scroll"><table class="t"><thead><tr><th>Method</th><th>What the threshold does, in one line</th><th>Number of thresholds</th></tr></thead><tbody>
+    <tr><td><b>Simple difference, Roberts, Sobel</b></td><td>Compute |G| at every pixel. If |G| is above T, it is an edge. Otherwise it is not.</td><td>1</td></tr>
+    <tr><td><b>Canny</b></td><td>First thin the edges to one pixel. Then use two limits. Above the <b>high</b> one is surely an edge. Between <b>low and high</b> counts only if it touches a sure edge. Below <b>low</b> is dropped.</td><td>2 (and linking)</td></tr>
+    <tr><td><b>Laplacian, LoG</b></td><td>Find the places where the response changes sign (zero crossings). Optionally ignore crossings whose slope is below T, because weak crossings are mostly noise.</td><td>0 or 1 (on the slope)</td></tr></tbody></table></div>`);
+  root.append(el('<h2>Thresholding: turning strength into edges</h2>'),el('<p class="explain">An operator gives every pixel an edge <b>strength</b>. To get an edge <b>map</b> you must decide how strong is strong enough. That decision is the threshold. Slide it and watch the two problems it has to balance.</p>'),ctl,ctl2,cards,H.el,info,note,el('<h3>Thresholding at a glance</h3>'),glance);
+  bindSeg(root,'nz',v=>{nz=v;render();});bindSeg(root,'sm',v=>{sm=+v;render();});bindSlider(root,'T',v=>{T=v;render();},'%');
+  function render(){
+    const src=inputFor(nz),f=sepG(src,sm),{gx,gy}=sobelXY(f),m=magOf(gx,gy),hi=pct(m,99.5),th=T/100*hi;
+    const mask=new Uint8Array(SS);for(let i=0;i<SS;i++)mask[i]=m[i]>th?1:0;
+    paintG(G,normImg(m,hi));paintMask(B,mask);
+    G.cap.textContent='Bright means a stronger edge';B.cap.textContent=`Threshold = ${T}% of the strongest edges`;
+    const hh=new Uint32Array(256);for(let i=0;i<SS;i++)hh[Math.min(255,Math.round(m[i]/hi*255))]++;
+    histDraw(H.cv,hh,{color:'--in',max:Math.max(...Array.from(hh.slice(2)),1),markers:[{x:Math.round(T/100*255),label:'T'}]});
+    H.cap.textContent='Most pixels are flat (left side, cut off at the top). Real edges are the few pixels far to the right. The threshold is the pink line.';
+    const n=countOn(mask);
+    info.innerHTML=`Pixels marked as edge: <b>${n}</b> (${(n/SS*100).toFixed(1)}% of the picture)`;
+    note.firstChild.innerHTML=T<12?'<b>Threshold too low:</b> the faint texture and the noise are all counted as edges, and real edges come out thick.':T>55?'<b>Threshold too high:</b> only the strongest edges survive and they are broken into pieces. Faint but real edges are lost.':'<b>A middle value</b> keeps the main outlines. But one number is always a compromise: any T that removes the noise also breaks the weaker real edges. Canny solves this with <b>two</b> thresholds.';
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 5 · Canny step by step ---------- */
+function viewCanny(root){
+  let nz='none',sg=1.4,lo=30,hi=90;
+  const S1=imgCard('1 · Smooth'),S2=imgCard('2 · Gradient'),S3=imgCard('3 · Thin (non-max suppression)'),S4=imgCard('4 · Double threshold'),S5=imgCard('5 · Link (hysteresis)'),S6=imgCard('Single threshold, for comparison');
+  const cards=grid(200);cards.append(S1.el,S2.el,S3.el,S4.el,S5.el,S6.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Input</span>${seg('nz',NZ,'none')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('sg','Smoothing σ',0.5,3,1.4,0.1)}${slider('lo','Low threshold',0,400,30,5)}${slider('hi','High threshold',0,600,90,5)}</div>`);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const legend=el('<p class="note"></p>');
+  const exp=el(`<ol class="note" style="padding-left:20px;margin:0 0 14px">
+    <li><b>Smooth</b> with a Gaussian so noise does not look like edges.</li>
+    <li><b>Gradient</b> with Sobel: strength and direction at every pixel.</li>
+    <li><b>Thin</b> (non-maximum suppression): along the gradient direction keep only the pixel that is the local peak. Thick bands shrink to one pixel.</li>
+    <li><b>Double threshold:</b> above the high threshold = <b>strong</b>, between low and high = <b>weak</b>, below low = dropped.</li>
+    <li><b>Link</b> (hysteresis): keep a weak pixel only if it is connected to a strong one.</li></ol>`);
+  const code=null;
+  root.append(el('<h2>Canny, one stage at a time</h2>'),el('<p class="explain">Canny is a pipeline of five small ideas. The two thresholds are in stages 4 and 5. Drag them and compare stage 5 with the single-threshold picture on the right.</p>'),exp,ctl,ctl2,cards,info,legend);
+  bindSeg(root,'nz',v=>{nz=v;render();});
+  bindSlider(root,'sg',v=>{sg=v;render();});
+  const sl=bindSlider(root,'lo',v=>{lo=v;if(hi<lo){hi=lo;sh.set(hi);}render();});
+  const sh=bindSlider(root,'hi',v=>{hi=v;if(lo>hi){lo=hi;sl.set(lo);}render();});
+  function paintRGB(card,fn){const d=card.img.data;for(let i=0;i<SS;i++){const c=fn(i),q=i*4;d[q]=c[0];d[q+1]=c[1];d[q+2]=c[2];d[q+3]=255;}card.ctx.putImageData(card.img,0,0);}
+  function render(){
+    const src=inputFor(nz),f=Float32Array.from(src),c=cannyRun(f,sg,lo,hi),m99=pct(c.mag,99.5);
+    paintG(S1,Uint8ClampedArray.from(c.blur,v=>Math.round(v)));
+    paintG(S2,normImg(c.mag,m99));
+    paintMask(S3,Uint8Array.from(c.nms,v=>v>0?1:0));
+    paintRGB(S4,i=>c.cls[i]===2?[255,255,255]:c.cls[i]===1?[255,150,40]:[14,18,26]);
+    paintRGB(S5,i=>c.out[i]===1?[255,255,255]:c.out[i]===2?[255,150,40]:c.cls[i]===1?[60,70,120]:[14,18,26]);
+    const single=new Uint8Array(SS);for(let i=0;i<SS;i++)single[i]=c.mag[i]>hi?1:0;
+    paintMask(S6,single);
+    S1.cap.textContent=`σ = ${num(sg,1)}`;S2.cap.textContent='Brighter = stronger. Edges are thick bands.';S3.cap.textContent='One pixel wide, but still includes every faint ridge';
+    S4.cap.textContent='White = strong, orange = weak';S5.cap.textContent='White = strong, orange = weak kept, dark blue = weak dropped';S6.cap.textContent='Only "gradient > high". No thinning, no linking.';
+    let ns=0,nw=0,nk=0,nd=0;for(let i=0;i<SS;i++){if(c.cls[i]===2)ns++;else if(c.cls[i]===1){nw++;if(c.out[i]===2)nk++;else nd++;}}
+    info.innerHTML=`Strong pixels: <b>${ns}</b> · weak pixels: <b>${nw}</b> (kept because they touch a strong edge: <b>${nk}</b>, dropped: <b>${nd}</b>) · final edge pixels: <b>${ns+nk}</b>`;
+    legend.textContent='The effect of double thresholding: weak pixels that join up with strong edges are rescued, which fills the gaps in real edges. Weak pixels on their own, which are usually noise, are thrown away. A single high threshold (right) breaks the edges, a single low threshold lets the noise in. Try the noisy input and raise the low threshold to see the difference.';
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 6 · Laplacian and LoG ---------- */
+function viewLap(root){
+  let nz='none',sg=1.5,t=20,row=64;
+  const A=imgCard('Input'),L1=imgCard('Laplacian response'),Z1=imgCard('Laplacian zero crossings'),L2=imgCard('LoG response'),Z2=imgCard('LoG zero crossings (Marr-Hildreth)');
+  const cards=grid(190);cards.append(A.el,L1.el,Z1.el,L2.el,Z2.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Input</span>${seg('nz',NZ,'none')}</div>`);
+  const ctl2=el(`<div class="controls">${slider('sg','LoG σ',0.5,4,1.5,0.1)}${slider('t','Crossing strength threshold',0,100,20)}${slider('row','Profile row',2,125,64)}</div>`);
+  const P=histCard('Laplacian and LoG response along the pink row','',720,230);
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const kern=el(`<div class="callout"><p><b>The Laplacian kernel</b> adds up the four neighbours and subtracts four times the centre, which is the second derivative in x plus the second derivative in y:</p><p class="mono" style="margin-top:6px">[0 1 0; 1 −4 1; 0 1 0]</p><p style="margin-top:8px"><b>LoG (Laplacian of Gaussian)</b> smooths with a Gaussian first and then applies the Laplacian. Because the two steps are linear, they can be combined into one kernel shaped like a Mexican hat. The Marr-Hildreth detector is LoG followed by zero-crossing detection.</p></div>`);
+  const cmp=el(`<div class="scroll"><table class="t"><thead><tr><th></th><th>Laplacian alone</th><th>LoG (Gaussian + Laplacian)</th></tr></thead><tbody>
+    <tr><td><b>Noise</b></td><td>Very sensitive: it is a second derivative with no smoothing</td><td>Much better: the Gaussian removes most noise first</td></tr>
+    <tr><td><b>Edge scale</b></td><td>Fixed: finest detail only</td><td>Chosen by σ: bigger σ keeps only coarser, larger edges</td></tr>
+    <tr><td><b>Zero crossings</b></td><td>Many, mostly false</td><td>Fewer, form clean closed curves</td></tr>
+    <tr><td><b>Direction</b></td><td colspan="2">Neither gives a direction (the Laplacian is the same in every direction)</td></tr>
+  </tbody></table></div>`);
+  root.append(el('<h2>Second derivative: Laplacian and LoG</h2>'),el('<p class="explain">The Laplacian is the second derivative. Across an edge it swings positive on one side and negative on the other, so the edge sits at the <b>zero crossing</b> between them. Gray in the response pictures is zero. The threshold only keeps crossings whose swing is big enough, which removes weak, noisy ones.</p>'),ctl,ctl2,cards,P.el,info,kern,el('<h3>With and without the Gaussian</h3>'),cmp);
+  bindSeg(root,'nz',v=>{nz=v;render();});bindSlider(root,'sg',v=>{sg=v;render();});bindSlider(root,'t',v=>{t=v;render();});bindSlider(root,'row',v=>{row=v;render();});
+  function resp(L,gain){const o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)o[i]=Math.round(Math.max(0,Math.min(255,128+L[i]*gain)));return o;}
+  function render(){
+    const src=inputFor(nz),f=Float32Array.from(src),L=laplacian(f),LG=laplacian(sepG(f,sg));
+    const hL=pct(L.map(Math.abs),99),hG=pct(LG.map(Math.abs),99);
+    const gL=100/Math.max(hL,1),gG=100/Math.max(hG,1);
+    const tL=t/100*hL*0.5,tG=t/100*hG*0.5;
+    paintG(A,src,row);paintG(L1,resp(L,gL),row);paintG(L2,resp(LG,gG),row);
+    const z1=zeroCross(L,tL),z2=zeroCross(LG,tG);
+    paintMask(Z1,z1);paintMask(Z2,z2);
+    L1.cap.textContent='Gray = 0, bright = positive, dark = negative';L2.cap.textContent=`σ = ${num(sg,1)}`;
+    Z1.cap.textContent=`${countOn(z1)} edge pixels`;Z2.cap.textContent=`${countOn(z2)} edge pixels`;
+    mapDraw(P.cv,[{pts:Array.from({length:S},(_,x)=>[x,Math.max(0,Math.min(255,128+L[row*S+x]*gL))]),color:'--muted',w:1.6},{pts:Array.from({length:S},(_,x)=>[x,Math.max(0,Math.min(255,128+LG[row*S+x]*gG))]),color:'--out',w:2.4}],{xdom:[0,S-1],ydom:[0,255],nodiag:true,xl:'column →',yl:'128 = zero'});
+    P.cap.innerHTML=swatches([['--muted','Laplacian alone'],['--out','LoG']])+'. Every time a line crosses the middle (128) that is a zero crossing. The unsmoothed line crosses far more often.';
+    info.innerHTML=`Zero-crossing edge pixels: Laplacian <b>${countOn(z1)}</b> · LoG <b>${countOn(z2)}</b>. ${nz==='gauss'?'With noise added the Laplacian marks speckle everywhere, and LoG stays tidy.':'Even this "clean" picture has a little fine grain. The Laplacian reacts to every bit of it, while LoG smooths it away. Raise the crossing threshold to see the Laplacian thin out, then try the noisy input.'}`;
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 7 · Compare and choose ---------- */
+function viewChoose(root){
+  let nz='none',P=22,q={noise:'no',thin:'no',dir:'no',fast:'no'};
+  const A=imgCard('Input'),D=imgCard('Simple difference'),R=imgCard("Roberts' cross"),Sb=imgCard('Sobel'),Lp=imgCard('Laplacian'),Lg=imgCard('LoG (Marr-Hildreth)'),Cn=imgCard('Canny');
+  const cards=grid(170);cards.append(A.el,D.el,R.el,Sb.el,Lp.el,Lg.el,Cn.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Input</span>${seg('nz',NZ,'none')}${slider('P','Sensitivity (% of strongest response kept)',5,60,22,1,'%')}</div>`);
+  const note=el('<p class="note">Same sensitivity for every method, so the pictures are comparable: gradient methods keep pixels above this share of their strongest response, Canny uses it for the high threshold (low = 40% of high), and the zero-crossing methods use it as the minimum swing.</p>');
+  const table=el(`<div class="scroll"><table class="t"><thead><tr><th>Method</th><th>Derivative</th><th>Noise</th><th>Edge width</th><th>Gives direction?</th><th>Best for</th></tr></thead><tbody>
+    <tr><td><b>Simple difference</b></td><td>1st</td><td>Very sensitive</td><td>1 to 2 pixels, half a pixel off</td><td>Yes (but crude)</td><td>Teaching, very fast checks on clean images</td></tr>
+    <tr><td><b>Roberts' cross</b></td><td>1st</td><td>Very sensitive</td><td>1 to 2 pixels, half a pixel off</td><td>Yes, on diagonal axes</td><td>Speed on clean, high-contrast images</td></tr>
+    <tr><td><b>Sobel</b></td><td>1st</td><td>Moderate: averages 3 rows or columns</td><td>A band 2 to 3 pixels wide</td><td>Yes, accurate</td><td>General purpose, and when you need the gradient direction</td></tr>
+    <tr><td><b>Canny</b></td><td>1st (Sobel inside)</td><td>Good: smoothing built in</td><td>One pixel, connected</td><td>Yes (used internally)</td><td>Clean, thin, closed outlines: the usual first choice</td></tr>
+    <tr><td><b>Laplacian</b></td><td>2nd</td><td>Very sensitive</td><td>Thin zero crossings</td><td>No</td><td>Sharpening, blob detection after smoothing; rarely alone</td></tr>
+    <tr><td><b>LoG / Marr-Hildreth</b></td><td>2nd</td><td>Good (choose σ)</td><td>Thin, closed curves</td><td>No</td><td>Edges at a chosen scale, accurate closed contours</td></tr>
+  </tbody></table></div>`);
+  const qs=el(`<div class="controls" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div><span class="ctl-label">Is the image noisy?</span> ${seg('qn',[['no','No'],['yes','Yes']],'no')}</div>
+    <div><span class="ctl-label">Do you need thin, one-pixel edges?</span> ${seg('qt',[['no','No'],['yes','Yes']],'no')}</div>
+    <div><span class="ctl-label">Do you need the edge direction?</span> ${seg('qd',[['no','No'],['yes','Yes']],'no')}</div>
+    <div><span class="ctl-label">Is speed the top priority?</span> ${seg('qf',[['no','No'],['yes','Yes']],'no')}</div></div>`);
+  const rec=el('<div class="callout" aria-live="polite"><p></p></div>');
+  const code=codeBlock(()=>`import cv2
+import numpy as np
+
+img   = cv2.imread("photo.jpg", cv2.IMREAD_GRAYSCALE)
+img_f = img.astype(np.float32)
+
+# first derivative: simple difference, Roberts, Sobel (each gives Gx, Gy)
+gx_d = cv2.filter2D(img_f, -1, np.array([[-1, 1]], np.float32), anchor=(0, 0))
+gy_d = cv2.filter2D(img_f, -1, np.array([[-1], [1]], np.float32), anchor=(0, 0))
+gx_r = cv2.filter2D(img_f, -1, np.array([[1, 0], [0, -1]], np.float32), anchor=(0, 0))
+gy_r = cv2.filter2D(img_f, -1, np.array([[0, 1], [-1, 0]], np.float32), anchor=(0, 0))
+gx_s = cv2.Sobel(img_f, cv2.CV_32F, 1, 0, ksize=3)
+gy_s = cv2.Sobel(img_f, cv2.CV_32F, 0, 1, ksize=3)
+sobel_mag = cv2.magnitude(gx_s, gy_s)
+sobel_edges = (sobel_mag > 100).astype(np.uint8) * 255      # one threshold
+
+# Canny: smooth, then two thresholds (low, high)
+blur  = cv2.GaussianBlur(img, (5, 5), 1.4)
+canny = cv2.Canny(blur, 50, 150, L2gradient=True)
+
+# second derivative: Laplacian, and LoG = Gaussian + Laplacian
+lap = cv2.Laplacian(img_f, cv2.CV_32F, ksize=1)
+log = cv2.Laplacian(cv2.GaussianBlur(img_f, (0, 0), 1.5), cv2.CV_32F, ksize=1)
+
+def zero_crossings(L, t):
+    """Mark pixels where the sign changes between neighbours by more than t."""
+    out = np.zeros(L.shape, bool)
+    for dy, dx in [(0, 1), (1, 0), (1, 1), (1, -1)]:
+        nb = np.roll(L, (-dy, -dx), axis=(0, 1))   # neighbour at (y+dy, x+dx)
+        out |= (L * nb < 0) & (np.abs(L - nb) > t)
+    return out.astype(np.uint8) * 255
+log_edges = zero_crossings(log, 5)`);
+  root.append(el('<h2>Compare the methods and choose</h2>'),el('<p class="explain">One picture, six methods. Switch to the noisy input first: that is where the differences show.</p>'),ctl,cards,note,el('<h3>Side by side</h3>'),table,el('<h3>Which one should I use?</h3>'),qs,rec,el('<h3>In OpenCV</h3>'),code.el);
+  bindSeg(root,'nz',v=>{nz=v;render();});bindSlider(root,'P',v=>{P=v;render();},'%');
+  bindSeg(root,'qn',v=>{q.noise=v;recommend();});bindSeg(root,'qt',v=>{q.thin=v;recommend();});bindSeg(root,'qd',v=>{q.dir=v;recommend();});bindSeg(root,'qf',v=>{q.fast=v;recommend();});
+  function thr(m,p){const hi=pct(m,99.5),th=p/100*hi,o=new Uint8Array(SS);for(let i=0;i<SS;i++)o[i]=m[i]>th?1:0;return o;}
+  function render(){
+    const src=inputFor(nz),f=Float32Array.from(src),p=P/100;
+    paintG(A,src);
+    const d=diffXY(f),ro=robertsXY(f),so=sobelXY(f),md=magOf(d.gx,d.gy),mr=magOf(ro.gx,ro.gy),ms=magOf(so.gx,so.gy);
+    const m1=thr(md,P),m2=thr(mr,P),m3=thr(ms,P);
+    paintMask(D,m1);paintMask(R,m2);paintMask(Sb,m3);
+    const L=laplacian(f),LG=laplacian(sepG(f,1.5)),hL=pct(L.map(Math.abs),99),hG=pct(LG.map(Math.abs),99);
+    const z1=zeroCross(L,p*hL*0.5),z2=zeroCross(LG,p*hG*0.5);
+    paintMask(Lp,z1);paintMask(Lg,z2);
+    const c0=cannyRun(f,1.4,0,0),mh=p*pct(c0.mag,99.5),c=cannyRun(f,1.4,0.4*mh,mh);
+    const cm=new Uint8Array(SS);for(let i=0;i<SS;i++)cm[i]=c.out[i]?1:0;paintMask(Cn,cm);
+    [[D,m1],[R,m2],[Sb,m3],[Lp,z1],[Lg,z2],[Cn,cm]].forEach(a=>{a[0].cap.textContent=`${countOn(a[1])} edge pixels`;});
+    A.cap.textContent=nz==='none'?'':'Noise added';
+  }
+  function recommend(){
+    let r;
+    if(q.thin==='yes'&&q.noise==='yes')r='<b>Canny.</b> It smooths first, thins every edge to one pixel and links the pieces with two thresholds. Raise σ for noisier images.';
+    else if(q.thin==='yes')r='<b>Canny</b> for clean, connected one-pixel edges, or <b>LoG</b> if you want edges at a particular scale and closed curves.';
+    else if(q.noise==='yes'&&q.dir==='yes')r='<b>Sobel on a smoothed image</b> (or Canny, which does exactly that). Sobel averages across rows and columns and gives an accurate direction.';
+    else if(q.noise==='yes')r='<b>LoG</b> or <b>Sobel after a Gaussian blur</b>. Never use the plain Laplacian, a simple difference or Roberts on a noisy image.';
+    else if(q.fast==='yes'&&q.dir==='yes')r='<b>Sobel</b> is still cheap and gives accurate directions. Use the simple difference or Roberts only if every operation counts.';
+    else if(q.fast==='yes')r='<b>Roberts’ cross</b> or the <b>simple difference</b>: a handful of subtractions per pixel. Fine on clean, high-contrast images.';
+    else if(q.dir==='yes')r='<b>Sobel</b>. It gives Gx and Gy, so you get both strength and direction.';
+    else r='<b>Sobel</b> as a safe default, or <b>Canny</b> when you want clean outlines for the next stage.';
+    rec.firstChild.innerHTML=r+(q.dir==='yes'?' The Laplacian and LoG do not give a direction.':'');
+  }
+  return {update(){render();code.refresh();recommend();},stop(){}};
+}
+
+initApp([{short:"Edges and derivatives",build:viewIntro},{short:"Do the sums",build:viewSums},{short:"First derivative",build:viewFirst},{short:"Thresholding",build:viewThresh},{short:"Canny",build:viewCanny},{short:"Laplacian and LoG",build:viewLap},{short:"Compare and choose",build:viewChoose}],'landscape');
+</script>

@@ -1,0 +1,857 @@
+<title>Histogram Equalization Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide column. Source picker, step tabs, then a stage of cards. Blue always means the input or original, orange the output or result, rose outline the thing you are pointing at. */
+:root{
+  --bg:#F3F4F7;--surface:#FFFFFF;--ink:#111827;--muted:#566074;--line:#CFD5E0;
+  --accent:#C2185B;--in:#2A58C8;--out:#C4510C;--ok:#1E8A4C;--bad:#C62828;--tone:var(--ink);
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+    --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319;--surface:#171C25;--ink:#E8ECF3;--muted:#9AA5B8;--line:#2B3340;
+  --accent:#FF6FA5;--in:#7FA6FF;--out:#FF9A5C;--ok:#5FD39A;--bad:#FF8A8A;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1.05;letter-spacing:-0.015em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:clamp(20px,3.4vw,26px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.25;margin:22px 0 6px}
+.lede{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.eyebrow,.cl,.ctl-label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;min-height:38px}
+button:hover{border-color:var(--ink)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button[aria-pressed="true"],button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 11%,var(--surface));border-color:var(--ink);font-weight:500}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.primary:hover{filter:brightness(1.15)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.steps button{display:flex;gap:8px;align-items:baseline}
+.steps button b{font-family:var(--font-mono);font-weight:500;color:var(--muted)}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button[aria-current="step"] b{color:var(--bg)}
+.panel[hidden]{display:none}
+.explain{margin:0 0 16px;max-width:70ch;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;margin-bottom:16px}
+.card{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card canvas{width:100%;height:auto;aspect-ratio:1;display:block;background:#000;border-radius:3px;image-rendering:pixelated}
+.card canvas.pick{cursor:crosshair}
+.card canvas.chart{aspect-ratio:1;background:var(--surface);image-rendering:auto}
+.card canvas.wide{aspect-ratio:512/170;background:var(--surface);image-rendering:auto}
+.card canvas.rulers{aspect-ratio:720/250;background:var(--surface);image-rendering:auto}
+.cc{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.cl{margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.controls[hidden]{display:none}
+.ctl{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl input[type=range]{width:min(220px,46vw);accent-color:var(--ink)}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:3.4em;font-variant-numeric:tabular-nums}
+.readout{margin:0 0 6px;font-size:15px;min-height:24px}
+.readout b,.mono{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.note{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:72ch}
+.formula{font-family:var(--font-mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;overflow-x:auto;white-space:nowrap}
+.callout{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:8px;padding:12px 14px;margin:0 0 16px;max-width:72ch}
+.callout p{margin:0}
+.callout .mono{font-size:14px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+table.t tr[hidden]{display:none}
+table.t tr.cur td{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.q p{margin:0}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);align-self:flex-start}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ans input[type=text],table.sum input{height:36px;font:inherit;font-family:var(--font-mono);font-size:14px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.ans input[type=text]{width:130px}
+.fb{font-size:14px;min-height:20px}
+.fb.ok,.okc{color:var(--ok)}
+.fb.bad,.badc{color:var(--bad)}
+.sol{border-left:3px solid var(--line);padding:2px 0 2px 12px;font-size:14px;color:var(--muted)}
+.sol p{margin:2px 0}
+.sol[hidden]{display:none}
+.opts{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opts button{text-align:left}
+.opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.score{font-family:var(--font-mono);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 14px;padding:0;list-style:none}
+.facts li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts li b{display:block;font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+.facts li span{color:var(--muted)}
+.code{position:relative;margin:0 0 14px}
+.code pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.55}
+.code button{position:absolute;top:8px;right:8px;min-height:30px;padding:3px 10px;font-size:12px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.small{font-size:13px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+
+</style>
+
+<main>
+  <header>
+    <p class="eyebrow" style="margin:0 0 8px">Machine vision · point operations</p>
+    <h1>Histogram equalization lab</h1>
+    <p class="lede">Read histograms of dark, bright, dull and harsh pictures, watch equalization build its mapping, see why it is non-linear and monotonic, compare it with stretching, then try a sum.</p>
+  </header>
+
+  <section class="row" aria-label="Choose an image">
+    <span class="ctl-label">Image</span>
+    <div class="seg" id="src">
+      <button type="button" data-v="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-v="shapes" aria-pressed="false">Shapes</button>
+      <button type="button" data-v="upload" aria-pressed="false">Upload your own</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <span class="small" id="srcmsg">Stored as 128 × 128 gray pixels. Everything runs in your browser.</span>
+  </section>
+
+  <nav class="steps" id="steps" aria-label="Steps"></nav>
+  <div id="stage"></div>
+  <div class="foot">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="primary">Next</button>
+  </div>
+</main>
+
+<script>
+//CORE-START
+const S=128,SS=S*S;
+function clamp8(v){return v<0?0:v>255?255:v;}
+function histo(a){const h=new Uint32Array(256);for(let i=0;i<a.length;i++)h[a[i]]++;return h;}
+function minMax(a){let mn=255,mx=0;for(let i=0;i<a.length;i++){if(a[i]<mn)mn=a[i];if(a[i]>mx)mx=a[i];}return [mn,mx];}
+function cumul(h){const c=new Float64Array(h.length);let s=0;for(let i=0;i<h.length;i++){s+=h[i];c[i]=s;}return c;}
+function stretchRaw(v,imin,imax,omin,omax){return (v-imin)/(imax-imin)*(omax-omin)+omin;}
+function stretch8(v,imin,imax){return clamp8(Math.round(stretchRaw(v,imin,imax,0,255)));}
+function pctLimits(h,n,p){
+  const c=cumul(h);let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(c[v]>p*n){lo=v;break;}}
+  for(let v=255;v>=0;v--){const above=n-(v>0?c[v-1]:0);if(above>p*n){hi=v;break;}}
+  return [lo,hi];
+}
+function peakLimits(h,f){
+  let mx=0;for(let i=0;i<256;i++)if(h[i]>mx)mx=h[i];
+  const thr=f*mx;let lo=0,hi=255;
+  for(let v=0;v<256;v++){if(h[v]>thr){lo=v;break;}}
+  for(let v=255;v>=0;v--){if(h[v]>thr){hi=v;break;}}
+  return [lo,hi,thr];
+}
+function eqLUT(h,n,mode){
+  const L=h.length,lut=new Array(L);let s=0;
+  for(let k=0;k<L;k++){s+=h[k];const x=(L-1)*s/n;lut[k]=mode==='floor'?Math.floor(x+1e-9):Math.round(x);}
+  return lut;
+}
+function eqLUTcv(h,n){
+  const lut=new Array(256).fill(0);let i=0;
+  while(i<256&&h[i]===0)i++;
+  if(i===256)return lut;
+  if(h[i]===n)return lut.fill(i);
+  const scale=255/(n-h[i]);let sum=0;lut[i]=0;i++;
+  for(;i<256;i++){sum+=h[i];lut[i]=Math.round(sum*scale);}
+  return lut;
+}
+function applyLUT(a,lut){const o=new Uint8ClampedArray(a.length);for(let i=0;i<a.length;i++)o[i]=lut[a[i]];return o;}
+function gammaV(v,g){return Math.round(255*Math.pow(v/255,g));}
+function linV(v,k,b){return clamp8(Math.round((v-128)*k+128+b));}
+function sCurveV(v,k){const x=v/255-0.5;return clamp8(Math.round(255*(Math.tanh(k*x)/(2*Math.tanh(k/2))+0.5)));}
+function meanStd(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];const m=s/a.length;let q=0;for(let i=0;i<a.length;i++){const d=a[i]-m;q+=d*d;}return [m,Math.sqrt(q/a.length)];}
+function levelsUsed(h){let c=0;for(let i=0;i<h.length;i++)if(h[i])c++;return c;}
+function lcg(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function makeDull(base,c,shift){
+  const lo=(255-255*c)/2,o=new Uint8ClampedArray(base.length);
+  for(let i=0;i<base.length;i++)o[i]=clamp8(Math.round(lo+base[i]*c+shift));
+  return o;
+}
+function addOutliers(a){
+  const o=Uint8ClampedArray.from(a);
+  for(let k=0;k<16;k++){const i=(k*2711+97)%a.length;o[i]=k%2?0:255;}
+  return o;
+}
+//CORE-END
+
+const BIG=720;
+const $=(s,r)=>(r||document).querySelector(s);
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#888';}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function fmt(n){return n.toLocaleString('en-US');}
+function num(x,d){const k=Math.pow(10,d==null?3:d);const r=Math.round(x*k)/k;return String(Object.is(r,-0)?0:r);}
+function seg(name,opts,cur){return `<div class="seg" data-name="${name}" role="group">${opts.map(o=>`<button type="button" data-v="${o[0]}" aria-pressed="${String(o[0])===String(cur)}">${o[1]}</button>`).join('')}</div>`;}
+function bindSeg(root,name,cb){
+  const g=root.querySelector(`.seg[data-name="${name}"]`);
+  g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));cb(b.dataset.v);});
+  return g;
+}
+function slider(id,label,min,max,val,step,suffix){
+  return `<label class="ctl" for="${id}"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step||1}"><output id="${id}-o" for="${id}">${val}${suffix||''}</output></label>`;
+}
+function bindSlider(root,id,cb,suffix){
+  const s=root.querySelector('#'+id),o=root.querySelector('#'+id+'-o');
+  const show=v=>{o.textContent=num(v,2)+(suffix||'');};
+  s.addEventListener('input',()=>{show(+s.value);cb(+s.value);});
+  return {set(v){s.value=v;show(+s.value);},get:()=>+s.value,el:s};
+}
+function animate(dur,fn,onEnd){
+  const t0=performance.now();let id=0;
+  function f(t){const p=Math.min(1,Math.max(0,(t-t0)/dur));fn(p);if(p<1)id=requestAnimationFrame(f);else{id=0;if(onEnd)onEnd();}}
+  id=requestAnimationFrame(f);
+  return()=>{if(id)cancelAnimationFrame(id);id=0;};
+}
+function cellAt(cv,e,n){
+  const r=cv.getBoundingClientRect();
+  let x=Math.floor((e.clientX-r.left)/r.width*n),y=Math.floor((e.clientY-r.top)/r.height*n);
+  x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));
+  return {x,y};
+}
+function imgCard(label,extra,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" class="${extra||''}" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  const cv=c.querySelector('canvas'),ctx=cv.getContext('2d');
+  return {el:c,cv,ctx,img:ctx.createImageData(S,S),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function grayCard(card,arr){
+  const d=card.img.data;
+  for(let i=0;i<SS;i++){const o=i*4;d[o]=d[o+1]=d[o+2]=arr[i];d[o+3]=255;}
+  card.ctx.putImageData(card.img,0,0);
+}
+function histCard(label,cap,w,h){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${w||512}" height="${h||170}" class="wide" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function chartCard(label,cap){
+  const c=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="300" height="300" class="chart" role="img" aria-label="${label.replace(/<[^>]*>/g,'')}"></canvas><p class="cc">${cap||''}</p></figure>`);
+  return {el:c,cv:c.querySelector('canvas'),cap:c.querySelector('.cc'),lab:c.querySelector('.cl')};
+}
+function histDraw(cv,h,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=16,pt=8;
+  const cMain=css(o.color||'--in'),cLine=css('--line'),cMut=css('--muted'),cAcc=css('--accent');
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  let mx=o.max||1;if(!o.max){for(let i=0;i<h.length;i++)if(h[i]>mx)mx=h[i];}
+  const bw=W/h.length,ph=H-pb-pt;
+  for(let i=0;i<h.length;i++){
+    const hh=h[i]/mx*ph;
+    g.fillStyle=(o.shade!=null&&i>o.shade)?cLine:cMain;
+    g.fillRect(i*bw,H-pb-hh,bw+0.5,hh);
+  }
+  g.fillStyle=cMut;g.fillRect(0,H-pb,W,1);
+  g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  [0,64,128,192,255].forEach(v=>{const x=(v+0.5)*W/256;g.fillRect(x,H-pb,1,4);g.textAlign=v===0?'left':v===255?'right':'center';g.fillText(String(v),v===0?1:v===255?W-1:x,H-3);});
+  if(o.cdf){
+    const c=cumul(h),tot=c[c.length-1]||1;g.strokeStyle=css('--ok');g.lineWidth=2;g.beginPath();
+    for(let i=0;i<h.length;i++){const x=(i+0.5)*bw,y=H-pb-c[i]/tot*ph;if(i===0)g.moveTo(x,y);else g.lineTo(x,y);}
+    g.stroke();
+  }
+  if(o.hline!=null){
+    const y=H-pb-o.hline/mx*ph;g.strokeStyle=cAcc;g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.setLineDash([]);
+  }
+  (o.markers||[]).forEach(m=>{
+    const x=(m.x+0.5)*bw;g.strokeStyle=m.color||cAcc;g.lineWidth=2;g.beginPath();g.moveTo(x,pt-4);g.lineTo(x,H-pb);g.stroke();
+    if(m.label){g.fillStyle=m.color||cAcc;g.textAlign=m.x>200?'right':'left';g.fillText(m.label,x+(m.x>200?-4:4),pt+6);}
+  });
+}
+function mapDraw(cv,series,o){
+  o=o||{};
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pl=30,pr=10,pt=10,pb=26;
+  const xd=o.xdom||[0,255],yd=o.ydom||[0,255];
+  const fx=x=>pl+(x-xd[0])/(xd[1]-xd[0])*(W-pl-pr),fy=y=>H-pb-(y-yd[0])/(yd[1]-yd[0])*(H-pb-pt);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  const D=o.div||4,ks=Array.from({length:D+1},(_,i)=>i);
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();
+  ks.forEach(k=>{const x=pl+k*(W-pl-pr)/D,y=pt+k*(H-pt-pb)/D;g.moveTo(x,pt);g.lineTo(x,H-pb);g.moveTo(pl,y);g.lineTo(W-pr,y);});
+  g.stroke();
+  g.fillStyle=css('--muted');g.font='11px "JetBrains Mono",monospace';g.textBaseline='alphabetic';
+  g.textAlign='center';ks.forEach(k=>{const v=xd[0]+k*(xd[1]-xd[0])/D;g.fillText(num(v,xd[1]-xd[0]>=20?0:2),pl+k*(W-pl-pr)/D,H-12);});
+  g.textAlign='right';ks.forEach(k=>{const v=yd[0]+k*(yd[1]-yd[0])/D;g.fillText(num(v,yd[1]-yd[0]>=20?0:2),pl-4,H-pb-k*(H-pt-pb)/D+4);});
+  g.textAlign='right';g.fillText(o.xl||'input →',W-pr,H-1);g.textAlign='left';g.fillText(o.yl||'output ↑',pl+4,pt+9);
+  if(!o.nodiag&&xd[0]===yd[0]&&xd[1]===yd[1]){
+    g.setLineDash([4,4]);g.strokeStyle=css('--muted');g.lineWidth=1;g.beginPath();g.moveTo(fx(xd[0]),fy(yd[0]));g.lineTo(fx(xd[1]),fy(yd[1]));g.stroke();g.setLineDash([]);
+  }
+  series.forEach(s=>{
+    const pts=s.pts||Array.from(s.lut,(y,x)=>[x,y]);
+    g.strokeStyle=s.color?css(s.color):css('--ink');g.lineWidth=s.w||2.5;
+    g.setLineDash(s.dash||[]);g.beginPath();
+    if(!s.dots){pts.forEach((p,i)=>{const x=fx(p[0]),y=fy(p[1]);if(i===0)g.moveTo(x,y);else g.lineTo(x,y);});g.stroke();}
+    g.setLineDash([]);
+    if(s.dots){g.fillStyle=s.color?css(s.color):css('--ink');pts.forEach(p=>{g.beginPath();g.arc(fx(p[0]),fy(p[1]),4,0,2*Math.PI);g.fill();});}
+  });
+  (o.vlines||[]).forEach(x=>{g.strokeStyle=css('--accent');g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(fx(x),pt);g.lineTo(fx(x),H-pb);g.stroke();g.setLineDash([]);});
+  (o.points||[]).forEach(p=>{
+    g.fillStyle=css(p.color||'--accent');g.beginPath();g.arc(fx(p.x),fy(p.y),p.r||6,0,2*Math.PI);g.fill();
+    g.strokeStyle=css('--surface');g.lineWidth=2;g.stroke();
+  });
+}
+function codeBlock(getText){
+  const w=el('<div class="code"><pre></pre><button type="button">Copy</button></div>');
+  const pre=w.querySelector('pre'),btn=w.querySelector('button');
+  function refresh(){pre.textContent=getText();}
+  btn.addEventListener('click',async()=>{
+    const t=pre.textContent;let done=false;
+    try{await navigator.clipboard.writeText(t);done=true;btn.textContent='Copied';}catch(e){}
+    if(!done){
+      try{const r=document.createRange();r.selectNodeContents(pre);const s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';}catch(e){btn.textContent='Select text';}
+    }
+    setTimeout(()=>{btn.textContent='Copy';},1600);
+  });
+  refresh();
+  return {el:w,refresh};
+}
+function statsLine(a){
+  const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);
+  return `mean <b>${m.toFixed(0)}</b> · spread (std) <b>${sd.toFixed(0)}</b> · range <b>${mn}</b> to <b>${mx}</b>`;
+}
+
+/* ---------- images ---------- */
+let LAST_RGBA=null;
+function noisyGray(rgba,seed,amp){
+  const g=new Uint8ClampedArray(SS),r=lcg(seed);
+  for(let i=0;i<SS;i++){
+    const v=0.299*rgba[i*4]+0.587*rgba[i*4+1]+0.114*rgba[i*4+2]+(r()+r()-1)*amp;
+    g[i]=Math.round(v<0?0:v>255?255:v);
+  }
+  return g;
+}
+function sceneLandscape(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  g.scale(0.5,0.5);
+  const sky=g.createLinearGradient(0,0,0,170);sky.addColorStop(0,'#1d3f87');sky.addColorStop(1,'#f6c48e');
+  g.fillStyle=sky;g.fillRect(0,0,256,256);
+  g.fillStyle='#fff3cf';g.beginPath();g.arc(188,78,24,0,2*Math.PI);g.fill();
+  const poly=(pts,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();g.fill();};
+  poly([[0,150],[40,100],[75,130],[120,80],[170,135],[210,105],[256,140],[256,180],[0,180]],'#7a6a8c');
+  poly([[0,190],[60,150],[130,175],[200,145],[256,170],[256,256],[0,256]],'#2f4a3a');
+  g.fillStyle='#d9d2c3';g.fillRect(30,122,56,70);
+  poly([[24,122],[58,98],[92,122]],'#8a3b2e');
+  g.fillStyle='#27323f';
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)g.fillRect(36+i*12,130+j*14,8,8);
+  poly([[150,200],[165,160],[180,200]],'#173524');poly([[170,205],[188,150],[206,205]],'#173524');
+  g.fillStyle='#27506e';g.fillRect(0,206,256,50);
+  g.fillStyle='rgba(255,255,255,0.28)';
+  for(let y=210;y<256;y+=6)g.fillRect(0,y,256,1);
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,11,6);
+}
+function sceneShapes(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,S);bg.addColorStop(0,'#141a22');bg.addColorStop(1,'#2a3340');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  g.fillStyle='#8c97a8';g.fillRect(14,70,40,40);g.fillRect(76,18,36,30);g.fillRect(70,84,44,30);
+  g.fillStyle='#ebe6d4';
+  [[34,34,16],[98,70,11],[40,92,9],[104,104,8]].forEach(a=>{g.beginPath();g.arc(a[0],a[1],a[2],0,2*Math.PI);g.fill();});
+  const id=g.getImageData(0,0,S,S).data;LAST_RGBA=Uint8ClampedArray.from(id);
+  return noisyGray(id,23,8);
+}
+function sceneCoins(){
+  const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,S,S);bg.addColorStop(0,'#f4f1ea');bg.addColorStop(1,'#e4dfd3');
+  g.fillStyle=bg;g.fillRect(0,0,S,S);
+  const coin=(x,y,r,a,b)=>{
+    const rg=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);rg.addColorStop(0,a);rg.addColorStop(1,b);
+    g.fillStyle=rg;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1.2;g.beginPath();g.arc(x,y,r*0.72,0,2*Math.PI);g.stroke();
+  };
+  const GOLD=['#c99a24','#85620c'],COP=['#b8714a','#7a3f20'],SIL=['#a2adb8','#5f6a76'];
+  [[24,26,15,GOLD],[51,24,13,SIL],[92,28,14,COP],[113,34,10,GOLD],[30,66,12,COP],[60,70,16,GOLD],[94,72,12,SIL],[22,104,11,SIL],[52,102,13,GOLD],[84,104,15,COP],[107,99,9,SIL]].forEach(k=>coin(k[0],k[1],k[2],k[3][0],k[3][1]));
+  const id=g.getImageData(0,0,S,S).data,r=lcg(31),o=new Uint8ClampedArray(SS*4),gr=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const n=(r()+r()-1)*6;
+    for(let k=0;k<3;k++)o[i*4+k]=Math.round(Math.max(0,Math.min(255,id[i*4+k]+n)));
+    o[i*4+3]=255;
+    gr[i]=Math.round(0.299*o[i*4]+0.587*o[i*4+1]+0.114*o[i*4+2]);
+  }
+  LAST_RGBA=o;
+  return gr;
+}
+
+/* ---------- app frame ---------- */
+const App={base:null,name:'Landscape',views:[],panels:[],cur:0,steps:[]};
+function setBase(gray,name,rgba){App.base=gray;App.name=name;if(rgba)App.rgba=rgba;const v=App.views[App.cur];if(v)v.update();}
+const SCENES={landscape:['Landscape',()=>sceneLandscape()],shapes:['Shapes',()=>sceneShapes()],coins:['Coins',()=>sceneCoins()]};
+function initApp(steps,start){
+  App.steps=steps;start=start||'landscape';
+  const stage=$('#stage'),nav=$('#steps');
+  steps.forEach((s,i)=>{
+    const b=el(`<button type="button"><b>${i+1}</b><span>${s.short}</span></button>`);
+    b.addEventListener('click',()=>go(i));
+    nav.appendChild(b);
+    const p=el('<section class="panel"></section>');p.hidden=true;stage.appendChild(p);App.panels.push(p);App.views.push(null);
+  });
+  function go(i){
+    const old=App.views[App.cur];if(old&&old.stop)old.stop();
+    App.cur=i;
+    App.panels.forEach((p,j)=>{p.hidden=j!==i;});
+    nav.querySelectorAll('button').forEach((b,j)=>{if(j===i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+    if(!App.views[i])App.views[i]=steps[i].build(App.panels[i]);
+    App.views[i].update();
+    $('#back').hidden=i===0;
+    $('#next').textContent=i===steps.length-1?'Start again':'Next';
+  }
+  $('#back').addEventListener('click',()=>go(Math.max(0,App.cur-1)));
+  $('#next').addEventListener('click',()=>go(App.cur===steps.length-1?0:App.cur+1));
+  const srcBtns=[...document.querySelectorAll('#src button')];
+  const setSource=v=>srcBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  const msg=$('#srcmsg'),DEF='Stored as 128 × 128 gray pixels. Everything runs in your browser.';
+  $('#src').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    const v=b.dataset.v;
+    if(SCENES[v]){setSource(v);msg.textContent=DEF;const gr=SCENES[v][1]();setBase(gr,SCENES[v][0],LAST_RGBA);}
+    else{$('#file').click();}
+  });
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    if(!/^image\//.test(f.type)){msg.textContent='Choose an image file such as PNG or JPG.';return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
+        const s=Math.min(im.width,im.height);
+        g.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        const d=g.getImageData(0,0,S,S).data,gr=new Uint8ClampedArray(SS);
+        for(let i=0;i<SS;i++)gr[i]=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+        setSource('upload');msg.textContent=f.name+' · cropped to a square and shrunk to 128 × 128.';
+        setBase(gr,f.name,Uint8ClampedArray.from(d));
+      };
+      im.onerror=()=>{msg.textContent='That file could not be read as an image.';};
+      im.src=r.result;
+    };
+    r.onerror=()=>{msg.textContent='That file could not be read.';};
+    r.readAsDataURL(f);
+    e.target.value='';
+  });
+  if(window.matchMedia){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const rr=()=>{const v=App.views[App.cur];if(v)v.update();};
+    if(mq.addEventListener)mq.addEventListener('change',rr);
+  }
+  App.base=SCENES[start][1]();App.rgba=LAST_RGBA;
+  go(0);
+  App.go=go;
+}
+
+function maxOf(h){let m=1;for(let i=0;i<h.length;i++)if(h[i]>m)m=h[i];return m;}
+const pick=(r,a)=>a[Math.floor(r()*a.length)];
+const SAMPLE_OPTS=[['dark','Dark'],['bright','Bright'],['low','Low contrast'],['high','High contrast'],['bal','Balanced']];
+let sCache={base:null,map:{}};
+function sample(kind){
+  if(sCache.base!==App.base)sCache={base:App.base,map:{}};
+  if(sCache.map[kind])return sCache.map[kind];
+  const b=App.base,o=new Uint8ClampedArray(SS);
+  for(let i=0;i<SS;i++){
+    const v=b[i];
+    o[i]=kind==='dark'?gammaV(v,2.4):kind==='bright'?gammaV(v,0.42):(kind==='low'||kind==='hot')?Math.round(128+(v-128)*0.25):kind==='high'?sCurveV(v,5):v;
+  }
+  return sCache.map[kind]=kind==='hot'?addOutliers(o):o;
+}
+function levelsLine(a){const h=histo(a),[m,sd]=meanStd(a),[mn,mx]=minMax(a);return {h,m,sd,mn,mx,lv:levelsUsed(h)};}
+
+/* ---------- 1 · Read histograms ---------- */
+function viewRead(root){
+  const defs=[
+    ['dark','Dark','The bars crowd the left, near 0. Most pixels are dark.'],
+    ['bright','Bright','The bars crowd the right, near 255. Most pixels are bright.'],
+    ['low','Low contrast','One narrow hump. All the values are close together, so nothing stands out.'],
+    ['high','High contrast','A wide spread with many pixels near both ends and few in the middle.'],
+    ['bal','Well balanced','Pixels spread across the whole range, with no side crowded.']
+  ];
+  const how=el('<div class="callout"><p><b>How to read a histogram.</b> The horizontal axis is the gray value, from 0 (black) on the left to 255 (white) on the right. The height of each bar is how many pixels have that value. <b>Where</b> the bars sit tells you the brightness. <b>How wide</b> they spread tells you the contrast.</p></div>');
+  const gal=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))"></div>');
+  const items=defs.map(d=>{
+    const f=el(`<figure class="card"><figcaption class="cl">${d[1]}</figcaption><canvas width="${S}" height="${S}" role="img" aria-label="${d[1]} picture"></canvas><canvas width="512" height="170" class="wide" role="img" aria-label="${d[1]} histogram"></canvas><p class="cc stat"></p><p class="cc">${d[2]}</p></figure>`);
+    const cs=f.querySelectorAll('canvas');
+    return {k:d[0],el:f,img:cs[0].getContext('2d').createImageData(S,S),ctx:cs[0].getContext('2d'),hist:cs[1],stat:f.querySelector('.stat')};
+  });
+  items.forEach(i=>gal.appendChild(i.el));
+  const P=imgCard('Your picture'),PH=histCard('Its histogram','');
+  const pg=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))"></div>');pg.append(P.el,PH.el);
+  const ctl=el(`<div class="controls">${slider('pb','Brightness',-100,100,0)}${slider('pc','Contrast',20,300,100,5,'%')}</div>`);
+  const pinfo=el('<p class="readout" aria-live="polite"></p>');
+  const pnote=el('<p class="note"></p>');
+  root.append(el('<h2>Reading histograms</h2>'),el('<p class="explain">A histogram throws away where each pixel is and keeps only how many pixels there are at each gray value. That is enough to tell at a glance whether an image is dark, bright, dull or harsh. Compare the five examples, then try the sliders.</p>'),how,gal,el('<h3>Try it yourself</h3>'),el('<p class="explain" style="margin-bottom:10px">Brightness slides the whole histogram left or right. Contrast squeezes or widens it. Push contrast high and bars pile up at 0 and 255, because those pixels are clipped.</p>'),ctl,pg,pinfo,pnote);
+  let br=0,ct=1;
+  bindSlider(root,'pb',v=>{br=v;renderP();});
+  bindSlider(root,'pc',v=>{ct=v/100;renderP();},'%');
+  function renderP(){
+    const o=new Uint8ClampedArray(SS);for(let i=0;i<SS;i++)o[i]=linV(App.base[i],ct,br);
+    grayCard(P,o);const L=levelsLine(o);
+    histDraw(PH.cv,L.h,{color:'--out'});
+    P.cap.textContent='Result of the two sliders';PH.cap.textContent='Taller bar = more pixels with that gray value.';
+    pinfo.innerHTML=`mean <b>${L.m.toFixed(0)}</b> · spread (std) <b>${L.sd.toFixed(0)}</b> · range <b>${L.mn}</b> to <b>${L.mx}</b>`;
+    pnote.textContent=ct>1.5?'The pile-ups at 0 and 255 are clipped pixels. Their detail is gone for good.':ct<0.6?'Low contrast: the histogram is narrow, so everything sits in a small band of grays.':br<-40?'Dark: the histogram has moved left.':br>40?'Bright: the histogram has moved right.':'';
+  }
+  function render(){
+    items.forEach(it=>{
+      const a=sample(it.k),d=it.img.data;
+      for(let i=0;i<SS;i++){const q=i*4;d[q]=d[q+1]=d[q+2]=a[i];d[q+3]=255;}
+      it.ctx.putImageData(it.img,0,0);
+      const L=levelsLine(a);
+      histDraw(it.hist,L.h,{color:'--in'});
+      it.stat.innerHTML=`mean <b>${L.m.toFixed(0)}</b> · spread <b>${L.sd.toFixed(0)}</b> · range <b>${L.mn}–${L.mx}</b>`;
+    });
+    renderP();
+  }
+  return {update:render,stop(){}};
+}
+
+/* ---------- 2 · Equalize ---------- */
+function viewEq(root){
+  let kind='dark',form='text',k=128,stopA=null,data=null;
+  const A=imgCard('Original'),HA=histCard('Histogram','Bars up to the line are counted so far'),M=chartCard('Mapping = running total','');
+  const B=imgCard('Equalized'),HB=histCard('New histogram',''),C=chartCard('Running totals compared','');
+  const row1=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))"></div>');row1.append(A.el,HA.el,M.el);
+  const row2=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))"></div>');row2.append(B.el,HB.el,C.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Picture</span>${seg('kind',SAMPLE_OPTS,'dark')}</div>`);
+  const ctl2=el(`<div class="controls"><span class="ctl-label">Formula</span>${seg('form',[['text','Textbook'],['cv','OpenCV equalizeHist']],'text')}</div>`);
+  const ctl3=el(`<div class="controls">${slider('kk','Gray level k',0,255,128)}<button type="button" id="play" class="primary">Scan from 0 to 255</button></div>`);
+  const scanInfo=el('<p class="readout" aria-live="polite"></p>');
+  const info=el('<p class="readout" aria-live="polite"></p>');
+  const note=el('<p class="note"></p>');
+  const steps=el(`<ol class="note" style="padding-left:20px;margin:0 0 14px">
+    <li><b>Count</b> the pixels at each gray value. That is the histogram.</li>
+    <li><b>Divide</b> each count by the total number of pixels to get a fraction p(k).</li>
+    <li><b>Add up as you go:</b> CDF(k) = p(0) + p(1) + … + p(k). This running total climbs from 0 to 1.</li>
+    <li><b>Rescale:</b> s(k) = round(255 × CDF(k)). Replace every pixel of value k with s(k).</li></ol>`);
+  root.append(el('<h2>Histogram equalization, step by step</h2>'),el('<p class="explain">Where many pixels are crowded into a few gray values, the running total climbs fast, so those values get pushed far apart and the contrast there grows. Where few pixels sit, the running total barely moves, so values stay close. The result uses the whole range and shows detail that was crowded together. Slide k, or press the scan button, to watch the running total build the mapping.</p>'),steps,ctl,ctl2,ctl3,row1,scanInfo,el('<h3>The result</h3>'),row2,info,note);
+  const pb=$('#play',root);
+  const sk=bindSlider(root,'kk',v=>{halt();k=v;render();});
+  bindSeg(root,'kind',v=>{halt();kind=v;data=null;render();});
+  bindSeg(root,'form',v=>{halt();form=v;data=null;render();});
+  function halt(){if(stopA){stopA();stopA=null;}pb.textContent='Scan from 0 to 255';}
+  pb.addEventListener('click',()=>{
+    if(stopA){halt();return;}
+    pb.textContent='Stop';
+    stopA=animate(7000,p=>{k=Math.round(p*255);sk.set(k);render();},()=>{stopA=null;pb.textContent='Scan from 0 to 255';});
+  });
+  function prep(){
+    if(data&&data.base===App.base&&data.kind===kind&&data.form===form)return data;
+    const src=sample(kind),h=histo(src),lut=form==='cv'?eqLUTcv(h,SS):eqLUT(h,SS,'near'),out=applyLUT(src,lut),ho=histo(out);
+    const cb=Array.from(cumul(h),c=>c/SS*255),ca=Array.from(cumul(ho),c=>c/SS*255);
+    return data={base:App.base,kind,form,src,h,lut,out,ho,cum:cumul(h),cb,ca,L0:levelsLine(src),L1:levelsLine(out)};
+  }
+  function render(){
+    const d=prep();
+    grayCard(A,d.src);grayCard(B,d.out);
+    histDraw(HA.cv,d.h,{color:'--in',shade:k,markers:[{x:k,label:'k = '+k}]});
+    histDraw(HB.cv,d.ho,{color:'--out'});
+    mapDraw(M.cv,[{lut:d.lut,color:'--out',w:3}],{vlines:[k],points:[{x:k,y:d.lut[k],color:'--accent'}],xl:'k →',yl:'s(k) ↑'});
+    mapDraw(C.cv,[{lut:d.cb,color:'--in',w:2.5},{lut:d.ca,color:'--out',w:2.5},{pts:[[0,0],[255,255]],color:'--muted',dash:[4,4],w:1.5}],{nodiag:true,xl:'gray value →',yl:'running total ↑'});
+    M.cap.textContent='The curve is the running total, rescaled to 0 to 255. Tall parts of the histogram make it steep.';
+    C.cap.innerHTML='<span class="swatch" style="background:var(--in)"></span>before <span class="swatch" style="background:var(--out);margin-left:8px"></span>after. The straighter the line, the flatter the histogram.';
+    HA.cap.textContent='Colored bars are counted so far.';HB.cap.textContent='Roughly flat, with gaps where levels were merged.';
+    A.cap.textContent=SAMPLE_OPTS.find(o=>o[0]===kind)[1];B.cap.textContent='Every pixel k replaced by s(k)';
+    const c=d.cum[k],frac=c/SS;
+    scanInfo.innerHTML=form==='cv'?
+      `k = <b>${k}</b>: <b>${fmt(c)}</b> of ${fmt(SS)} pixels are at or below it. OpenCV subtracts the first non-empty bin so the darkest pixel maps to 0 → s(${k}) = <b>${d.lut[k]}</b>`:
+      `k = <b>${k}</b>: <b>${fmt(c)}</b> of ${fmt(SS)} pixels are at or below it → CDF = <b>${frac.toFixed(3)}</b> → s(${k}) = round(255 × ${frac.toFixed(3)}) = <b>${d.lut[k]}</b>`;
+    info.innerHTML=`Spread (std): <b>${d.L0.sd.toFixed(0)}</b> → <b>${d.L1.sd.toFixed(0)}</b> · range: <b>${d.L0.mn}–${d.L0.mx}</b> → <b>${d.L1.mn}–${d.L1.mx}</b> · gray levels in use: <b>${d.L0.lv}</b> → <b>${d.L1.lv}</b>`;
+    note.textContent=form==='cv'?'OpenCV uses s(k) = round((cum(k) − cum_first) ÷ (N − cum_first) × 255), where cum_first is the count in the first non-empty bin. It only differs from the textbook version by that small shift.':'Levels can merge: two different input values may get the same output value, so the number of levels in use can go down. That is why equalization cannot be undone.';
+  }
+  return {update(){data=null;render();},stop:halt};
+}
+
+/* ---------- 3 · Why it works ---------- */
+function viewWhy(root){
+  const PRE={dark:[60,45,30,15,8,4,2,1],bright:[1,2,4,8,15,30,45,60],narrow:[0,2,10,50,50,10,2,0],uniform:[20,20,20,20,20,20,20,20],humps:[50,20,5,2,2,5,20,50]};
+  let cnt=PRE.dark.slice(),kind='dark',drag=false;
+  const PC=el('<figure class="card"><figcaption class="cl">Drag the bars up and down</figcaption><canvas width="480" height="210" class="wide" style="aspect-ratio:480/210;touch-action:none;cursor:ns-resize" role="img" aria-label="Editable histogram with eight gray levels"></canvas><p class="cc">An 8-level image. Each bar is how many pixels have that level.</p></figure>');
+  const pcv=PC.querySelector('canvas');
+  const MC=chartCard('Mapping s(k)','');
+  const top=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))"></div>');top.append(PC,MC.el);
+  const pre=el(`<div class="controls"><span class="ctl-label">Start from</span>${seg('pre',[['dark','Dark'],['bright','Bright'],['narrow','Narrow middle'],['uniform','Already flat'],['humps','Two humps']],'dark')}</div>`);
+  const tw=el('<div class="scroll"></div>');
+  const merged=el('<p class="readout" aria-live="polite"></p>');
+  const mono=el('<p class="readout" aria-live="polite"></p>');
+  const ctlB=el(`<div class="controls"><span class="ctl-label">Picture</span>${seg('kind',SAMPLE_OPTS,'dark')}</div>`);
+  const CB=chartCard('Three rules for the same picture','');
+  const CBimg=imgCard('Picture');
+  const bcards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))"></div>');bcards.append(CB.el,CBimg.el);
+  const lin=el('<p class="readout" aria-live="polite"></p>');
+  const mon2=el('<p class="readout" aria-live="polite"></p>');
+  const two=el(`<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))">
+    <div class="callout" style="margin:0"><p><b>Why it is non-linear.</b> The mapping is the running total of the histogram, so its slope at each level is proportional to the bar height there: s′(k) = (L − 1) × p(k). Tall bars give steep stretches, short bars give shallow ones. A histogram is rarely flat, so the curve bends. Contrast stretching uses one fixed slope everywhere, which is a straight line.</p></div>
+    <div class="callout" style="margin:0"><p><b>Why it is monotonic.</b> A running total only ever adds counts that are zero or positive, so it can rise or stay level but never fall. Therefore k₁ &lt; k₂ always gives s(k₁) ≤ s(k₂). A darker pixel is never made brighter than a lighter one, so the order of brightness is kept. Levels can merge (equal outputs) but never swap.</p></div></div>`);
+  root.append(el('<h2>Why it works: non-linear and monotonic</h2>'),el('<p class="explain">First, a tiny 8-level histogram you can edit. Watch how the mapping follows the running total. Then compare the real mapping against a straight-line stretch on a picture.</p>'),pre,top,tw,merged,mono,el('<h3>On a real picture</h3>'),ctlB,bcards,lin,mon2,two);
+  const bw=480/8;
+  function drawPaint(){
+    const g=pcv.getContext('2d'),W=pcv.width,H=pcv.height,pb=22,pt=18;
+    g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+    const ph=H-pb-pt;
+    g.font='12px "JetBrains Mono",monospace';g.textAlign='center';
+    cnt.forEach((v,i)=>{
+      const h=v/100*ph;g.fillStyle=css('--in');g.fillRect(i*bw+6,H-pb-h,bw-12,h);
+      g.fillStyle=css('--ink');g.fillText(String(v),i*bw+bw/2,H-pb-h-5);
+      g.fillStyle=css('--muted');g.fillText(String(i),i*bw+bw/2,H-6);
+    });
+    g.fillStyle=css('--muted');g.fillRect(0,H-pb,W,1);
+  }
+  function setBar(e){
+    const r=pcv.getBoundingClientRect();
+    const x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+    const i=Math.max(0,Math.min(7,Math.floor(x*8)));
+    const pb=22/210,pt=18/210;
+    const v=Math.round(Math.max(0,Math.min(100,(1-pb-y)/(1-pb-pt)*100)));
+    cnt[i]=v;renderA();
+  }
+  pcv.addEventListener('pointerdown',e=>{drag=true;try{pcv.setPointerCapture(e.pointerId);}catch(x){}setBar(e);});
+  pcv.addEventListener('pointermove',e=>{if(drag)setBar(e);});
+  pcv.addEventListener('pointerup',()=>{drag=false;});
+  pcv.addEventListener('pointercancel',()=>{drag=false;});
+  bindSeg(root,'pre',v=>{cnt=PRE[v].slice();renderA();});
+  bindSeg(root,'kind',v=>{kind=v;renderB();});
+  function renderA(){
+    drawPaint();
+    const N=cnt.reduce((a,b)=>a+b,0);
+    if(N===0){tw.innerHTML='<p class="note">Raise at least one bar to see the table.</p>';merged.textContent='';mono.textContent='';mapDraw(MC.cv,[],{xdom:[0,7],ydom:[0,7],div:7,xl:'k →',yl:'s(k) ↑'});return;}
+    const lut=eqLUT(cnt,N,'near'),cum=cumul(cnt);
+    let h='<table class="t"><thead><tr><th class="num">k</th><th class="num">n(k)</th><th class="num">p(k)</th><th class="num">CDF(k)</th><th class="num">7 × CDF</th><th class="num">s(k)</th></tr></thead><tbody>';
+    cnt.forEach((v,k)=>{h+=`<tr><td class="num">${k}</td><td class="num">${v}</td><td class="num">${(v/N).toFixed(3)}</td><td class="num">${(cum[k]/N).toFixed(3)}</td><td class="num">${(7*cum[k]/N).toFixed(2)}</td><td class="num"><b>${lut[k]}</b></td></tr>`;});
+    tw.innerHTML=h+'</tbody></table>';
+    const pts=lut.map((s,k)=>[k,s]);
+    mapDraw(MC.cv,[{pts,color:'--out',w:2.5},{pts,color:'--out',dots:true}],{xdom:[0,7],ydom:[0,7],div:7,xl:'k →',yl:'s(k) ↑'});
+    MC.cap.textContent='Dots are (k, s(k)). The dashed line is "no change". Steep where a bar is tall.';
+    const groups={};lut.forEach((s,k)=>{(groups[s]=groups[s]||[]).push(k);});
+    const ms=Object.keys(groups).filter(s=>groups[s].length>1).map(s=>`levels ${groups[s].join(', ')} → ${s}`);
+    merged.innerHTML=ms.length?`Merged levels: <b>${ms.join(' · ')}</b>. Several inputs share one output, so the mapping cannot be reversed.`:'No levels merged here: every input has its own output.';
+    let dec=0;for(let k=1;k<8;k++)if(lut[k]<lut[k-1])dec++;
+    mono.innerHTML=`Steps where s(k) goes <b>down</b>: <b>${dec}</b>. Edit the bars as you like and this stays 0, because a running total never falls.`;
+  }
+  function renderB(){
+    const src=sample(kind),h=histo(src),[mn,mx]=minMax(src);
+    const eq=eqLUT(h,SS,'near'),st=Array.from({length:256},(_,v)=>mx>mn?stretch8(v,mn,mx):v);
+    grayCard(CBimg,src);CBimg.cap.textContent=SAMPLE_OPTS.find(o=>o[0]===kind)[1];
+    mapDraw(CB.cv,[{lut:st,color:'--in',w:2.5},{lut:eq,color:'--out',w:3}],{xl:'input →',yl:'output ↑'});
+    CB.cap.innerHTML='<span class="swatch" style="background:var(--in)"></span>stretch (straight line) <span class="swatch" style="background:var(--out);margin-left:8px"></span>equalization (curve)';
+    const dev=(lut)=>{const a=lut[mn],b=lut[mx];let m=0;for(let v=mn;v<=mx;v++){const l=mx>mn?a+(b-a)*(v-mn)/(mx-mn):a;m=Math.max(m,Math.abs(lut[v]-l));}return m;};
+    lin.innerHTML=`Biggest gap from a straight line (between Imin and Imax): stretch <b>${dev(st).toFixed(1)}</b> levels, equalization <b>${dev(eq).toFixed(1)}</b> levels. ${dev(eq)>3?'Equalization bends, so it is non-linear.':'Here equalization is close to straight, because this histogram is already close to flat.'}`;
+    let dec=0,flat=0;for(let v=1;v<256;v++){if(eq[v]<eq[v-1])dec++;if(v>=mn&&v<=mx&&eq[v]===eq[v-1])flat++;}
+    mon2.innerHTML=`Equalization curve: steps that go down: <b>${dec}</b> · neighbouring levels that got the same output (between Imin and Imax): <b>${flat}</b>`;
+  }
+  return {update(){renderA();renderB();},stop(){drag=false;}};
+}
+
+/* ---------- 4 · Compare ---------- */
+function viewCompare(root){
+  let kind='dark',lim='minmax';
+  const mk=(label)=>{
+    const f=el(`<figure class="card"><figcaption class="cl">${label}</figcaption><canvas width="${S}" height="${S}" role="img" aria-label="${label}"></canvas><canvas width="512" height="170" class="wide" role="img" aria-label="${label} histogram"></canvas><p class="cc"></p></figure>`);
+    const cs=f.querySelectorAll('canvas');
+    return {el:f,ctx:cs[0].getContext('2d'),img:cs[0].getContext('2d').createImageData(S,S),hist:cs[1],cap:f.querySelector('.cc')};
+  };
+  const O=mk('Original'),T=mk('Contrast stretching'),E=mk('Histogram equalization');
+  const cards=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))"></div>');cards.append(O.el,T.el,E.el);
+  const ctl=el(`<div class="controls"><span class="ctl-label">Picture</span>${seg('kind',SAMPLE_OPTS.concat([['hot','Dull + stray pixels']]),'dark')}</div>`);
+  const ctl2=el(`<div class="controls"><span class="ctl-label">Stretch limits</span>${seg('lim',[['minmax','Plain min and max'],['pct','2% percentiles']],'minmax')}</div>`);
+  const MC=chartCard('The two mappings','');
+  const mw=el('<div class="scroll"></div>');
+  const mrow=el('<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))"></div>');mrow.append(MC.el);
+  const mcell=el('<div class="card" style="gap:6px"><p class="cl" style="margin:0">Measured on this picture</p></div>');mcell.appendChild(mw);mrow.append(mcell);
+  const verdict=el('<div class="callout"><p></p></div>');
+  const cmp=el(`<div class="scroll"><table class="t"><thead><tr><th></th><th>Contrast stretching</th><th>Histogram equalization</th></tr></thead><tbody>
+    <tr><td><b>Mapping</b></td><td>A straight line through two points (linear)</td><td>A curve built from the running total (non-linear)</td></tr>
+    <tr><td><b>Order of brightness</b></td><td>Kept (monotonic)</td><td>Kept (monotonic), but levels can merge</td></tr>
+    <tr><td><b>Settings</b></td><td>You choose Imin and Imax, or percentiles</td><td>None. The histogram decides</td></tr>
+    <tr><td><b>Output histogram</b></td><td>Same shape, just wider</td><td>Roughly flat</td></tr>
+    <tr><td><b>Can it be undone?</b></td><td>Yes, if nothing was clipped</td><td>No, merged levels are lost</td></tr>
+    <tr><td><b>Look of the result</b></td><td>Natural, gentle</td><td>Strong, sometimes harsh or noisy</td></tr>
+    <tr><td><b>Best when</b></td><td>The image uses only a narrow band and you want to keep its look</td><td>Detail is crowded into a band that holds most of the pixels, or the image already spans 0 to 255</td></tr>
+    <tr><td><b>Weak spot</b></td><td>Outliers, and images that already span 0 to 255</td><td>Amplifies noise in flat areas, global only (CLAHE works on small tiles to fix that)</td></tr>
+  </tbody></table></div>`);
+  const code=codeBlock(()=>`import cv2
+import numpy as np
+
+gray = cv2.imread("photo.jpg", cv2.IMREAD_GRAYSCALE)
+
+# contrast stretching with 5th and 95th percentile limits
+lo, hi = np.percentile(gray, (5, 95))
+stretched = np.clip((gray - lo) / (hi - lo) * 255, 0, 255).astype(np.uint8)
+
+# histogram equalization
+equalized = cv2.equalizeHist(gray)
+
+# CLAHE: equalization on small tiles, with a limit on how much contrast it adds
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+adaptive = clahe.apply(gray)`);
+  root.append(el('<h2>Contrast stretching or equalization?</h2>'),el('<p class="explain">Same picture, two methods. Try each picture in turn. Dark and low-contrast pictures show what both can do. The last one, a dull picture with stray pixels, shows where plain stretching fails and equalization does not. The balanced picture shows that equalization can overdo it.</p>'),ctl,ctl2,cards,mrow,verdict,el('<h3>Side by side</h3>'),cmp,el('<h3>In OpenCV</h3>'),el('<p class="explain" style="margin-bottom:10px">CLAHE is the tutorial\'s next task. It runs equalization on small tiles and clips the contrast gain, which tames the noise amplification you may see above.</p>'),code.el);
+  bindSeg(root,'kind',v=>{kind=v;render();});
+  bindSeg(root,'lim',v=>{lim=v;render();});
+  function paint(c,a){const d=c.img.data;for(let i=0;i<SS;i++){const q=i*4;d[q]=d[q+1]=d[q+2]=a[i];d[q+3]=255;}c.ctx.putImageData(c.img,0,0);}
+  function render(){
+    const src=sample(kind),h=histo(src);
+    let lo,hi;if(lim==='pct')[lo,hi]=pctLimits(h,SS,0.02);else[lo,hi]=minMax(src);
+    if(hi<=lo){hi=Math.min(255,lo+1);if(hi<=lo)lo=hi-1;}
+    const stl=Array.from({length:256},(_,v)=>stretch8(v,lo,hi)),eql=eqLUT(h,SS,'near');
+    const a1=applyLUT(src,stl),a2=applyLUT(src,eql);
+    paint(O,src);paint(T,a1);paint(E,a2);
+    const L=[levelsLine(src),levelsLine(a1),levelsLine(a2)],m=Math.max(maxOf(L[0].h),maxOf(L[1].h),maxOf(L[2].h));
+    histDraw(O.hist,L[0].h,{color:'--in',max:m});histDraw(T.hist,L[1].h,{color:'--out',max:m});histDraw(E.hist,L[2].h,{color:'--out',max:m});
+    O.cap.textContent='Before';T.cap.textContent=`Limits ${lo} and ${hi}`;E.cap.textContent='No settings';
+    mapDraw(MC.cv,[{lut:stl,color:'--in',w:2.5},{lut:eql,color:'--out',w:3}],{xl:'input →',yl:'output ↑'});
+    MC.cap.innerHTML='<span class="swatch" style="background:var(--in)"></span>stretch <span class="swatch" style="background:var(--out);margin-left:8px"></span>equalization';
+    const rows=[['Range',L.map(x=>`${x.mn}–${x.mx}`)],['Mean',L.map(x=>x.m.toFixed(0))],['Spread (std)',L.map(x=>x.sd.toFixed(0))],['Levels in use',L.map(x=>String(x.lv))]];
+    mw.innerHTML='<table class="t"><thead><tr><th></th><th class="num">Original</th><th class="num">Stretch</th><th class="num">Equalized</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${r[0]}</td>${r[1].map(v=>`<td class="num">${v}</td>`).join('')}</tr>`).join('')+'</tbody></table>';
+    let msg;
+    if(kind==='hot'&&lim==='minmax')msg='The stray pixels give Imin = 0 and Imax = 255, so plain stretching does nothing. Equalization ignores the extremes because it only cares how many pixels sit at each level. Switch the stretch to 2% percentiles to rescue the stretch.';
+    else if(kind==='hot')msg='Percentile limits ignore the stray pixels and rescue the stretch. Equalization needs no such setting.';
+    else if(kind==='bal')msg='This picture already uses the whole range. Stretching can do nothing, and equalization changes the look strongly. Is it better, or just different? Contrast enhancement is a judgement.';
+    else if(kind==='high')msg='Already high contrast: stretching changes little, and equalization pulls the crowded ends toward the middle.';
+    else msg='Stretching keeps the original look and the histogram shape. Equalization gives the biggest jump in visible detail, at the cost of a harsher look and merged levels.';
+    verdict.firstChild.textContent=msg;
+  }
+  return {update(){render();code.refresh();},stop(){}};
+}
+
+/* ---------- 5 · Class sum ---------- */
+function barsDraw(cv,counts,color,title){
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height,pb=22,pt=22,L=counts.length,bw=W/L,mx=Math.max(1,...counts);
+  g.clearRect(0,0,W,H);g.fillStyle=css('--surface');g.fillRect(0,0,W,H);
+  g.font='12px "JetBrains Mono",monospace';g.textAlign='center';
+  counts.forEach((v,i)=>{const h=v/mx*(H-pb-pt);g.fillStyle=css(color);g.fillRect(i*bw+5,H-pb-h,bw-10,h);g.fillStyle=css('--ink');g.fillText(String(v),i*bw+bw/2,H-pb-h-4);g.fillStyle=css('--muted');g.fillText(String(i),i*bw+bw/2,H-6);});
+  g.fillStyle=css('--muted');g.fillRect(0,H-pb,W,1);g.textAlign='left';g.fillText(title,4,13);
+}
+function genCounts(L,N,r){
+  for(let a=0;a<3000;a++){
+    const kd=a%4,w=[];
+    for(let k=0;k<L;k++){
+      const x=k/(L-1);
+      const v=kd===0?Math.pow(1-x,1.6)+0.05:kd===1?Math.pow(x,1.6)+0.05:kd===2?Math.exp(-Math.pow((x-0.5)/0.22,2))+0.05:Math.exp(-Math.pow((x-0.15)/0.18,2))+Math.exp(-Math.pow((x-0.85)/0.18,2))+0.05;
+      w.push(v*(0.6+0.8*r()));
+    }
+    const rest=N-L,sum=w.reduce((x,y)=>x+y,0),exact=w.map(x=>x/sum*rest),base=exact.map(Math.floor);
+    let left=rest-base.reduce((x,y)=>x+y,0);
+    const order=exact.map((x,i)=>[x-Math.floor(x),i]).sort((x,y)=>y[0]-x[0]);
+    for(let j=0;j<left;j++)base[order[j][1]]++;
+    const cnt=base.map(x=>x+1);
+    let cum=0,ok=true,diff=0;
+    for(let k=0;k<L;k++){cum+=cnt[k];const x=(L-1)*cum/N;if(Math.abs(x-Math.floor(x)-0.5)<1e-9)ok=false;if(Math.round(x)!==k)diff++;}
+    if(ok&&diff>=Math.ceil(L/2))return cnt;
+  }
+  return L===4?[8,6,4,2]:[14,9,6,4,3,2,1,1];
+}
+function makeProblem(mode,r){
+  if(mode==='tut'){
+    const p=[0.1,0.2,0.4,0.3],L=4;let c=0;const cdf=p.map(x=>(c+=x,Math.round(c*1000)/1000));
+    const mult=cdf.map(x=>Math.round((L-1)*x*1000)/1000),s=mult.map(x=>Math.round(x));
+    return {mode,L,N:null,p,cdf,mult,s,counts:null};
+  }
+  const L=mode==='easy'?4:8,N=mode==='easy'?20:40,counts=genCounts(L,N,r);
+  let cum=0;const p=counts.map(c=>c/N),cdf=counts.map(c=>(cum+=c)/N),mult=cdf.map(x=>(L-1)*x),s=mult.map(x=>Math.round(x));
+  const vals=[];counts.forEach((c,k)=>{for(let i=0;i<c;i++)vals.push(k);});
+  for(let i=vals.length-1;i>0;i--){const j=Math.floor(r()*(i+1));const t=vals[i];vals[i]=vals[j];vals[j]=t;}
+  return {mode,L,N,p,cdf,mult,s,counts,vals,cols:mode==='easy'?5:8};
+}
+function viewSum(root){
+  let mode='tut',seedN=Date.now()&0xffffff,prob=null,revealed=false;
+  const modeSeg=seg('mode',[['tut','The tutorial question'],['easy','Small image · 4 levels'],['std','Larger image · 8 levels']],'tut');
+  const ctl=el(`<div class="controls"><span class="ctl-label">Question</span>${modeSeg}<button type="button" id="newq">New question</button></div>`);
+  const stmt=el('<div class="callout"></div>');
+  const gridHost=el('<div></div>');
+  const tw=el('<div class="scroll"></div>');
+  const act=el('<div class="controls"><button type="button" class="primary" id="chk">Check my answers</button><button type="button" id="rev">Show answers</button><button type="button" id="clr">Clear</button><button type="button" id="hint" class="tog" aria-pressed="false">Hint</button></div>');
+  const hintBox=el('<div class="callout" hidden><p class="mono">p(k) = n(k) ÷ N<br>CDF(k) = p(0) + p(1) + … + p(k)<br>s(k) = round( (L − 1) × CDF(k) )</p><p style="margin-top:8px">Round to the nearest whole number. This question set avoids exact .5 cases.</p></div>');
+  const score=el('<p class="score" aria-live="polite"></p>');
+  const result=el('<div hidden></div>');
+  root.append(el('<h2>A sum to do in class</h2>'),el('<p class="explain">Fill in the table, press Check, and see which cells are right. Press Show answers to reveal the whole solution. The first question is the one on your tutorial sheet. The other two build a fresh question each time, with a small image you count the pixels from.</p>'),ctl,stmt,gridHost,tw,act,hintBox,score,result);
+  bindSeg(root,'mode',v=>{mode=v;build();});
+  $('#newq',root).addEventListener('click',()=>{seedN=(seedN*7919+13)&0xffffff;build();});
+  $('#hint',root).addEventListener('click',e=>{hintBox.hidden=!hintBox.hidden;e.currentTarget.setAttribute('aria-pressed',String(!hintBox.hidden));});
+  const f3=x=>String(Math.round(x*1000)/1000);
+  let inputs=[];
+  function build(){
+    revealed=false;result.hidden=true;result.innerHTML='';score.textContent='';
+    prob=makeProblem(mode,lcg(seedN+(mode==='easy'?1:mode==='std'?2:0)));
+    const {L,N}=prob;
+    if(mode==='tut'){
+      stmt.innerHTML=`<p>A grayscale image has intensity levels {0, 1, 2, 3} and these pixel probabilities: P(0) = 0.1, P(1) = 0.2, P(2) = 0.4, P(3) = 0.3. Find the intensity transformation for histogram equalization.</p>`;
+      gridHost.innerHTML='';
+    }else{
+      stmt.innerHTML=`<p>This ${prob.cols===5?'5 × 4':'8 × 5'} image has ${N} pixels and ${L} gray levels (0 to ${L-1}). Count the pixels at each level, then find the histogram equalization mapping.</p>`;
+      let h=`<div style="display:grid;grid-template-columns:repeat(${prob.cols},minmax(0,44px));gap:3px;margin:0 0 14px">`;
+      prob.vals.forEach(v=>{const g=Math.round(v/(L-1)*255);h+=`<div style="height:38px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:14px;border:1px solid var(--line);border-radius:3px;background:rgb(${g},${g},${g});color:${g>140?'#000':'#fff'}">${v}</div>`;});
+      gridHost.innerHTML=h+'</div>';
+    }
+    const cols=mode==='tut'?['k','p(k) given','CDF(k)','3 × CDF(k)','New level s(k)']:['k','Count n(k)','p(k)','CDF(k)',`${L-1} × CDF(k)`,'New level s(k)'];
+    let h='<table class="t sum"><thead><tr>'+cols.map((c,i)=>`<th class="${i?'num':''}">${c}</th>`).join('')+'</tr></thead><tbody>';
+    for(let k=0;k<L;k++){
+      h+=`<tr><td class="num">${k}</td>`;
+      if(mode==='tut'){
+        h+=`<td class="num">${prob.p[k]}</td>`;
+        h+=cell(k,'cdf',prob.cdf[k],0.004)+cell(k,'mult',prob.mult[k],0.02)+cell(k,'s',prob.s[k],0);
+      }else{
+        h+=cell(k,'n',prob.counts[k],0)+cell(k,'p',prob.p[k],0.004)+cell(k,'cdf',prob.cdf[k],0.004)+cell(k,'mult',prob.mult[k],0.02)+cell(k,'s',prob.s[k],0);
+      }
+      h+='</tr>';
+    }
+    tw.innerHTML=h+'</tbody></table>';
+    inputs=[...tw.querySelectorAll('input')];
+    inputs.forEach(i=>i.addEventListener('input',()=>{i.classList.remove('okb','badb');}));
+  }
+  function cell(k,key,exp,tol){return `<td class="num"><input type="text" inputmode="decimal" size="6" style="width:84px;text-align:right" data-k="${k}" data-key="${key}" data-exp="${exp}" data-tol="${tol}" aria-label="${key} for level ${k}"></td>`;}
+  function parse(s){
+    s=s.trim().replace(',','.');
+    if(/^-?\d*\.?\d+$/.test(s))return parseFloat(s);
+    if(/^-?\d+\s*\/\s*\d+$/.test(s)){const q=s.split('/');return parseFloat(q[0])/parseFloat(q[1]);}
+    return NaN;
+  }
+  function mark(inp,good){inp.style.borderColor=good?'var(--ok)':'var(--bad)';inp.style.background=good?'color-mix(in srgb,var(--ok) 12%,var(--surface))':'color-mix(in srgb,var(--bad) 10%,var(--surface))';}
+  function unmark(inp){inp.style.borderColor='';inp.style.background='';}
+  $('#chk',root).addEventListener('click',()=>{
+    let ok=0,bad=0,empty=0;
+    inputs.forEach(i=>{
+      if(i.value.trim()===''){empty++;unmark(i);return;}
+      const v=parse(i.value),exp=+i.dataset.exp,tol=+i.dataset.tol;
+      const good=!isNaN(v)&&Math.abs(v-exp)<=tol+1e-9;
+      mark(i,good);if(good)ok++;else bad++;
+    });
+    score.innerHTML=`<span class="okc">${ok} correct</span> · <span class="badc">${bad} not right</span> · ${empty} still empty (out of ${inputs.length} cells)`;
+    if(ok===inputs.length)showResult();
+  });
+  $('#rev',root).addEventListener('click',()=>{
+    inputs.forEach(i=>{const e=+i.dataset.exp;i.value=i.dataset.key==='n'||i.dataset.key==='s'?String(e):f3(e);mark(i,true);});
+    score.textContent='Answers shown.';showResult();
+  });
+  $('#clr',root).addEventListener('click',()=>{inputs.forEach(i=>{i.value='';unmark(i);});score.textContent='';result.hidden=true;});
+  function showResult(){
+    const {L,s,counts}=prob;
+    let h='<h3>Solution</h3>';
+    h+=`<p class="readout"><b>Mapping:</b> ${s.map((v,k)=>`${k} → ${v}`).join(' · ')}</p>`;
+    if(mode==='tut'){
+      const ident=s.every((v,k)=>v===k);
+      h+=`<p class="note">The cumulative sums are 0.1, 0.3, 0.7, 1.0. Multiplying by L − 1 = 3 gives 0.3, 0.9, 2.1, 3.0, which round to ${s.join(', ')}. ${ident?'This is the identity mapping: after rounding, equalization leaves this image unchanged. The histogram was already close to evenly spread in the cumulative sense, so there is little to gain with only four levels. ':''}If your lecture slides round down instead of to the nearest integer, you would get 0, 0, 2, 3, so check which rule your course uses.</p>`;
+      h+='<div class="code"><pre>import numpy as np\n\np = np.array([0.1, 0.2, 0.4, 0.3]); L = 4\ncdf = np.cumsum(p)                  # [0.1 0.3 0.7 1. ]\ns = np.round((L - 1) * cdf)         # [0. 1. 2. 3.]\nprint(s)</pre></div>';
+      result.innerHTML=h;
+    }else{
+      const nc=new Array(L).fill(0);counts.forEach((c,k)=>{nc[s[k]]+=c;});
+      h+=`<p class="note">New counts after equalization: ${nc.map((c,k)=>`level ${k}: ${c}`).join(' · ')}. Levels that map to the same output are merged, and the spread of the histogram becomes more even.</p>`;
+      h+='<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));margin-top:10px"><figure class="card"><canvas width="360" height="150" class="wide" style="aspect-ratio:360/150" role="img" aria-label="Counts before"></canvas></figure><figure class="card"><canvas width="360" height="150" class="wide" style="aspect-ratio:360/150" role="img" aria-label="Counts after"></canvas></figure></div>';
+      result.innerHTML=h;
+      const cs=result.querySelectorAll('canvas');
+      barsDraw(cs[0],counts,'--in','Before: n(k)');barsDraw(cs[1],nc,'--out','After: new n(k)');
+    }
+    result.hidden=false;
+  }
+  build();
+  return {update(){},stop(){}};
+}
+
+initApp([{short:"Read histograms",build:viewRead},{short:"Equalize",build:viewEq},{short:"Why it works",build:viewWhy},{short:"Compare",build:viewCompare},{short:"Class sum",build:viewSum}],'landscape');
+</script>

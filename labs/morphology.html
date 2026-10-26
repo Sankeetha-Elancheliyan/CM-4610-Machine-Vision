@@ -1,0 +1,329 @@
+<title>Morphology Stepper</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one centred column. Controls on top, input and output grids side by side, status line, then a recap strip and the four rules. */
+:root{
+  --bg:#F3F6F7;
+  --surface:#FFFFFF;
+  --fg:#14202A;
+  --muted:#586873;
+  --line:#CBD5DB;
+  --accent:#1F6F8B;
+  --accent-soft:#DCEBF1;
+  --on:#1F6F8B;
+  --add:#2E9E6B;
+  --rem-bg:#FBE3E0;
+  --rem-line:#C9473B;
+  --unk:#E7ECEF;
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --cs:clamp(16px,calc((100vw - 47px)/14),26px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E151A;--surface:#162128;--fg:#E6EEF2;--muted:#93A5B0;--line:#2C3B45;
+    --accent:#58B8D6;--accent-soft:#1C3440;--on:#4FB3D1;--add:#43C58A;
+    --rem-bg:#3A1F1F;--rem-line:#E5675A;--unk:#1B2830;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E151A;--surface:#162128;--fg:#E6EEF2;--muted:#93A5B0;--line:#2C3B45;
+  --accent:#58B8D6;--accent-soft:#1C3440;--on:#4FB3D1;--add:#43C58A;
+  --rem-bg:#3A1F1F;--rem-line:#E5675A;--unk:#1B2830;color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.6;
+  padding-block:28px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--font-display);font-weight:600;font-size:clamp(26px,5vw,34px);line-height:1.1;margin:0;letter-spacing:-0.01em;text-wrap:balance}
+.lede{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.label{font-family:var(--font-mono);font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.group{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{
+  font:inherit;font-size:14px;color:var(--fg);background:var(--surface);border:1px solid var(--line);
+  border-radius:6px;padding:7px 13px;cursor:pointer;min-height:36px;
+}
+button:hover{border-color:var(--accent)}
+button:active{transform:scale(0.98)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:500}
+button.go{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:500}
+button.go:hover{filter:brightness(1.08)}
+input[type=range]{accent-color:var(--accent);width:110px}
+.speed{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.prog{margin-left:auto;font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.panels{display:flex;flex-wrap:wrap;gap:20px 28px}
+.panel{min-width:0}
+.panel .title{font-size:13px;color:var(--muted);margin:0 0 6px;min-height:20px}
+.g{display:grid;grid-template-columns:repeat(14,var(--cs));grid-auto-rows:var(--cs);gap:1px;background:var(--line);border:1px solid var(--line);width:max-content;max-width:100%}
+.g.t{grid-template-columns:repeat(12,9px);grid-auto-rows:9px}
+.c{background:var(--surface);position:relative}
+.c.on{background:var(--on)}
+.c.u{background:var(--unk)}
+.c.pad{background:repeating-linear-gradient(135deg,var(--unk) 0 3px,var(--surface) 3px 6px)}
+.c.add{background:var(--add)}
+.c.rem{background:var(--rem-bg);box-shadow:inset 0 0 0 2px var(--rem-line)}
+.c.w{box-shadow:inset 0 0 0 2px var(--fg)}
+.c.cur{box-shadow:inset 0 0 0 3px var(--fg)}
+.c.ctr::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--fg);border:1px solid var(--surface)}
+.status{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;font-size:15px;line-height:1.5;min-height:66px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block;flex:none}
+.thumbs{display:flex;flex-wrap:wrap;gap:16px 28px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.rule{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0}
+.rule h2{font-family:var(--font-display);font-weight:600;font-size:17px;margin:0 0 4px}
+.rule p{margin:0;font-size:14px;color:var(--muted)}
+.rule code{font-family:var(--font-mono);font-size:13px;color:var(--fg)}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+</style>
+
+<main>
+  <header>
+    <h1>Morphology stepper</h1>
+    <p class="lede">Watch erosion, dilation, opening and closing work on a small binary image, one pixel at a time.</p>
+  </header>
+
+  <section aria-label="Controls">
+    <p class="label">Operation</p>
+    <div class="group" id="ops">
+      <button data-op="erode">Erosion</button>
+      <button data-op="dilate">Dilation</button>
+      <button data-op="open">Opening</button>
+      <button data-op="close">Closing</button>
+    </div>
+    <p class="label" style="margin-top:14px">Structuring element</p>
+    <div class="group" id="ses">
+      <button data-se="square">3×3 square</button>
+      <button data-se="cross">3×3 cross</button>
+    </div>
+  </section>
+
+  <section class="panels" aria-label="Image grids">
+    <div class="panel"><p class="title" id="ltitle">Input image</p><div class="g" id="gl" role="img" aria-label="Input binary image"></div></div>
+    <div class="panel"><p class="title" id="rtitle">Output</p><div class="g" id="gr" role="img" aria-label="Output binary image"></div></div>
+  </section>
+
+  <section class="row" aria-label="Playback">
+    <button id="bReset">Reset</button>
+    <button id="bBack">Back</button>
+    <button id="bStep" class="go">Step</button>
+    <button id="bPlay">Play</button>
+    <button id="bStage">Finish stage</button>
+    <label class="speed" for="spd">Speed <input type="range" id="spd" min="1" max="10" step="1" value="4"></label>
+    <span class="prog" id="prog"></span>
+  </section>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--on)"></i>foreground (1)</span>
+    <span><i class="sw" style="background:var(--surface);box-shadow:inset 0 0 0 2px var(--fg)"></i>structuring element</span>
+    <span><i class="sw" style="background:var(--add)"></i>pixel turned on</span>
+    <span><i class="sw" style="background:var(--rem-bg);box-shadow:inset 0 0 0 2px var(--rem-line)"></i>pixel turned off</span>
+    <span><i class="sw" style="background:repeating-linear-gradient(135deg,var(--unk) 0 3px,var(--surface) 3px 6px)"></i>outside the image (counts as 0)</span>
+  </div>
+  <p style="margin:0;font-size:13px;color:var(--muted)">At step 0, click any pixel in the input grid to switch it on or off and try your own shape.</p>
+
+  <section>
+    <p class="label">Image at each stage</p>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+
+  <section>
+    <p class="label">The four rules</p>
+    <div class="rules">
+      <div class="rule"><h2>Erosion</h2><p>Output is 1 only when the structuring element fits entirely inside the foreground. Objects shrink and specks vanish.</p></div>
+      <div class="rule"><h2>Dilation</h2><p>Output is 1 when the structuring element touches the foreground anywhere. Objects grow and small holes fill.</p></div>
+      <div class="rule"><h2>Opening</h2><p>Erosion, then dilation. Removes small specks and thin bridges while keeping the main shape's size.</p></div>
+      <div class="rule"><h2>Closing</h2><p>Dilation, then erosion. Fills small holes and gaps while keeping the main shape's size.</p></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const R=9,C=12,N=R*C;
+const start=[
+0,0,0,0,0,0,0,0,0,0,0,0,
+0,1,1,1,1,1,1,0,0,0,0,0,
+0,1,1,1,1,1,1,0,0,1,0,0,
+0,1,1,0,1,1,1,1,0,0,0,0,
+0,1,1,1,1,1,1,1,1,0,0,0,
+0,1,1,1,1,1,1,1,1,0,0,0,
+0,0,0,1,1,1,1,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,1,0,
+0,0,0,0,0,0,0,0,0,0,0,0];
+let img=start.slice(),op='erode',se='square',pos=0,timer=null;
+let inputs=[],outputs=[],kinds=[];
+const names={erode:'erosion',dilate:'dilation'};
+const opNames={erode:'Erosion',dilate:'Dilation',open:'Opening',close:'Closing'};
+const done={
+erode:'Erosion shrinks the object: isolated noise pixels vanish, the hole grows, and every edge moves inward.',
+dilate:'Dilation grows the object: the hole fills, gaps close, and isolated noise pixels grow into blocks.',
+open:'Opening (erosion then dilation) removes small specks and keeps the main shape at about its original size. The hole is not filled.',
+close:'Closing (dilation then erosion) fills small holes and gaps and keeps the main shape at about its original size. Isolated specks stay.'};
+function offs(){return se==='square'?[[-1,-1],[-1,0],[-1,1],[0,-1],[0,0],[0,1],[1,-1],[1,0],[1,1]]:[[-1,0],[0,-1],[0,0],[0,1],[1,0]];}
+function count(src,p,kind){
+  const r=Math.floor(p/C),c=p%C;let hits=0,tot=0;
+  for(const [dr,dc] of offs()){
+    const rr=r+dr,cc=c+dc;tot++;
+    if(rr>=0&&rr<R&&cc>=0&&cc<C&&src[rr*C+cc])hits++;
+  }
+  return {hits,tot,out:kind==='erode'?(hits===tot?1:0):(hits>0?1:0)};
+}
+function recompute(){
+  kinds=op==='erode'?['erode']:op==='dilate'?['dilate']:op==='open'?['erode','dilate']:['dilate','erode'];
+  inputs=[img.slice()];outputs=[];
+  kinds.forEach((k,s)=>{
+    const o=new Array(N);
+    for(let p=0;p<N;p++)o[p]=count(inputs[s],p,k).out;
+    outputs.push(o);inputs.push(o);
+  });
+}
+function mk(el){
+  el.innerHTML='';
+  const a=[];
+  for(let i=0;i<N;i++){const d=document.createElement('div');d.className='c';el.appendChild(d);a.push(d);}
+  return a;
+}
+function mkPad(el){
+  el.innerHTML='';
+  const cells=new Array(N),pads=new Map();
+  for(let r=-1;r<=R;r++){for(let c=-1;c<=C;c++){
+    const d=document.createElement('div');
+    if(r>=0&&r<R&&c>=0&&c<C){d.className='c';cells[r*C+c]=d;}
+    else{d.className='c pad';pads.set(r+','+c,d);}
+    el.appendChild(d);
+  }}
+  return {cells,pads};
+}
+const LP=mkPad(document.getElementById('gl')),RP=mkPad(document.getElementById('gr'));
+const L=LP.cells,Rr=RP.cells;
+L.forEach((d,i)=>d.addEventListener('click',()=>{
+  if(pos!==0)return;
+  img[i]=img[i]?0:1;recompute();render();
+}));
+let thumbCells=[];
+function buildThumbs(){
+  const t=document.getElementById('thumbs');t.innerHTML='';thumbCells=[];
+  const labels=['Original'];
+  if(kinds.length===2)labels.push('After '+names[kinds[0]]);
+  labels.push('Result: '+opNames[op].toLowerCase());
+  labels.forEach(lb=>{
+    const w=document.createElement('div');
+    const p=document.createElement('p');p.className='title';p.style.cssText='font-size:13px;color:var(--muted);margin:0 0 6px';p.textContent=lb;
+    const g=document.createElement('div');g.className='g t';
+    w.appendChild(p);w.appendChild(g);t.appendChild(w);
+    thumbCells.push(mk(g));
+  });
+}
+function paint(cells,arr){
+  cells.forEach((d,i)=>{d.className='c'+(arr?(arr[i]?' on':''):' u');});
+}
+function total(){return kinds.length*N;}
+function render(){
+  const S=kinds.length,tot=S*N;
+  const st=pos===0?0:Math.floor((pos-1)/N);
+  const p=pos===0?-1:(pos-1)%N;
+  const src=inputs[st],out=outputs[st];
+  const o=offs();
+  const winSet=new Set();
+  LP.pads.forEach(d=>{d.className='c pad';});
+  RP.pads.forEach(d=>{d.className='c pad';});
+  if(p>=0){
+    const r=Math.floor(p/C),c=p%C;
+    o.forEach(([dr,dc])=>{
+      const rr=r+dr,cc=c+dc;
+      if(rr>=0&&rr<R&&cc>=0&&cc<C)winSet.add(rr*C+cc);
+      else LP.pads.get(rr+','+cc).className='c pad w';
+    });
+  }
+  L.forEach((d,i)=>{
+    let cl='c'+(src[i]?' on':'');
+    if(winSet.has(i))cl+=' w';
+    if(i===p)cl+=' ctr';
+    d.className=cl;
+    d.style.cursor=pos===0?'pointer':'default';
+  });
+  Rr.forEach((d,i)=>{
+    if(pos===0||i>p){d.className='c u';return;}
+    let cl='c';
+    if(out[i]){cl+=' on';if(!src[i])cl+=' add';}
+    else if(src[i])cl+=' rem';
+    if(i===p)cl+=' cur';
+    d.className=cl;
+  });
+  document.getElementById('ltitle').textContent=st===0?'Input image':'Stage '+(st+1)+' input (result of '+names[kinds[st-1]]+')';
+  document.getElementById('rtitle').textContent='Output of '+names[kinds[st]]+(S>1?' (stage '+(st+1)+' of '+S+')':'');
+  let msg;
+  if(p<0){
+    msg='Press Step or Play. The structuring element is centred on each pixel in turn, left to right and top to bottom. '+(op==='open'?'Opening runs erosion first, then dilation on the result.':op==='close'?'Closing runs dilation first, then erosion on the result.':'');
+  }else{
+    const k=kinds[st],r=Math.floor(p/C),c=p%C;
+    const q=count(src,p,k);
+    const where='Row '+r+', column '+c+'. ';
+    if(k==='erode'){
+      msg=where+'Erosion: '+q.hits+' of '+q.tot+' structuring element pixels land on foreground. '+(q.out?'The element fits completely, so output = 1.':'The element does not fit completely, so output = 0.');
+    }else{
+      msg=where+'Dilation: '+q.hits+' of '+q.tot+' structuring element pixels land on foreground. '+(q.out?'The element touches the object, so output = 1.':'The element touches nothing, so output = 0.');
+    }
+    if(pos===tot)msg+=' Done. '+done[op];
+  }
+  document.getElementById('status').textContent=msg;
+  document.getElementById('prog').textContent='Step '+pos+' of '+tot;
+  paint(thumbCells[0],img);
+  if(S===2){
+    paint(thumbCells[1],pos>=N?outputs[0]:null);
+    paint(thumbCells[2],pos===tot?outputs[1]:null);
+  }else{
+    paint(thumbCells[1],pos===tot?outputs[0]:null);
+  }
+  document.querySelectorAll('[data-op]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.op===op)));
+  document.querySelectorAll('[data-se]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.se===se)));
+}
+function stop(){
+  if(timer){clearInterval(timer);timer=null;}
+  document.getElementById('bPlay').textContent='Play';
+}
+function tick(){
+  if(pos>=total()){stop();return;}
+  pos++;render();
+  if(pos>=total())stop();
+}
+function delay(){const v=+document.getElementById('spd').value;return Math.round(900/Math.pow(v,1.5));}
+function play(){
+  if(timer){stop();return;}
+  if(pos>=total()){pos=0;render();}
+  document.getElementById('bPlay').textContent='Pause';
+  timer=setInterval(tick,delay());
+}
+document.getElementById('bPlay').addEventListener('click',play);
+document.getElementById('spd').addEventListener('input',()=>{
+  if(timer){clearInterval(timer);timer=setInterval(tick,delay());}
+});
+document.getElementById('bStep').addEventListener('click',()=>{stop();if(pos<total()){pos++;render();}});
+document.getElementById('bBack').addEventListener('click',()=>{stop();if(pos>0){pos--;render();}});
+document.getElementById('bReset').addEventListener('click',()=>{stop();pos=0;render();});
+document.getElementById('bStage').addEventListener('click',()=>{
+  stop();
+  const st=pos===0?0:Math.floor((pos-1)/N);
+  pos=Math.min(total(),(st+1)*N);
+  render();
+});
+document.querySelectorAll('[data-op]').forEach(b=>b.addEventListener('click',()=>{
+  stop();op=b.dataset.op;pos=0;recompute();buildThumbs();render();
+}));
+document.querySelectorAll('[data-se]').forEach(b=>b.addEventListener('click',()=>{
+  stop();se=b.dataset.se;pos=0;recompute();render();
+}));
+recompute();buildThumbs();render();
+</script>
